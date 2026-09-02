@@ -21,6 +21,7 @@ type SheetProps = {
   style?: StyleProp<ViewStyle>;
   handleColor: string;
   backdropOpacity?: number;
+  scrollAtTop?: boolean;
 };
 
 type DialogProps = {
@@ -43,12 +44,16 @@ const WEB_OPACITY_LAYER = Platform.OS === 'web'
   ? ({ willChange: 'opacity' } as any)
   : undefined;
 
-export function IOSSheet({ visible, onClose, children, style, handleColor, backdropOpacity = 0.46 }: SheetProps) {
+export function IOSSheet({ visible, onClose, children, style, handleColor, backdropOpacity = 0.46, scrollAtTop = true }: SheetProps) {
   const [mounted, setMounted] = useState(visible);
   const presentation = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const dragY = useRef(new Animated.Value(0)).current;
   const closing = useRef(false);
   const sheetHeight = useRef(640);
+  const scrollAtTopRef = useRef(scrollAtTop);
+  const gestureStartedAtTop = useRef(scrollAtTop);
+
+  useEffect(() => { scrollAtTopRef.current = scrollAtTop; }, [scrollAtTop]);
 
   const animateOut = useCallback((notify: boolean) => {
     if (closing.current) return;
@@ -98,7 +103,11 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
   }, [dragY, mounted, presentation, visible]);
 
   const responder = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_, gesture) => gesture.dy > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.15,
+    onStartShouldSetPanResponderCapture: () => {
+      gestureStartedAtTop.current = scrollAtTopRef.current;
+      return false;
+    },
+    onMoveShouldSetPanResponder: (_, gesture) => gestureStartedAtTop.current && gesture.dy > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.15,
     onPanResponderGrant: () => dragY.stopAnimation(),
     onPanResponderMove: (_, gesture) => {
       const raw = Math.max(0, gesture.dy);
