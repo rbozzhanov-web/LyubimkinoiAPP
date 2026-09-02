@@ -1,5 +1,11 @@
 import type { ExtractedPage } from './types';
 
+type PdfTextItem = {
+  str: string;
+  transform: number[];
+  width: number;
+};
+
 /** Extracts positioned text entirely in the browser. The PDF bytes never leave the device. */
 export async function extractPdfPagesWeb(data: ArrayBuffer): Promise<ExtractedPage[]> {
   if (typeof window === 'undefined') throw new Error('Web PDF extraction requires a browser');
@@ -14,14 +20,15 @@ export async function extractPdfPagesWeb(data: ArrayBuffer): Promise<ExtractedPa
     const page = await document.getPage(pageNumber);
     const viewport = page.getViewport({ scale: 1 });
     const content = await page.getTextContent();
-    const items = content.items
-      .filter((item): item is Extract<typeof item, { str: string }> => 'str' in item)
-      .map((item) => ({
-        str: item.str,
-        x: item.transform[4],
-        y: viewport.height - item.transform[5],
-        width: item.width,
-      }));
+    const textItems = (content.items as unknown[]).filter(
+      (item): item is PdfTextItem => typeof item === 'object' && item !== null && 'str' in item,
+    );
+    const items = textItems.map((item) => ({
+      str: item.str,
+      x: item.transform[4],
+      y: viewport.height - item.transform[5],
+      width: item.width,
+    }));
     pages.push({ items, width: viewport.width, height: viewport.height });
   }
 
