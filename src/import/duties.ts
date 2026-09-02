@@ -7,13 +7,16 @@ export interface RosterSector {
   deadhead: boolean; actualTimes: boolean; dutyIndex: number; dutySectorIndex: number;
 }
 export interface RosterDuty { index: number; start?: string; end?: string; sectorCount: number }
-export interface RosterReading { sectors: RosterSector[]; duties: RosterDuty[]; unreadCells: string[] }
+export interface RosterAbsence { code: 'SICK' | 'UFF'; date: string }
+export interface RosterReading { sectors: RosterSector[]; duties: RosterDuty[]; absences: RosterAbsence[]; unreadCells: string[] }
 const DELAY_LABEL = 'Delay';
 const GROUND_DUTY_CODE_RE = /^[A-Z][A-Z0-9_]{1,7}$/;
+const PAYROLL_ABSENCE_CODES = new Set<RosterAbsence['code']>(['SICK', 'UFF']);
 
 export function readRoster(columns: DayColumn[], periodStart: string, periodEnd: string): RosterReading {
   const sectors: RosterSector[] = [];
   const duties: RosterDuty[] = [];
+  const absences: RosterAbsence[] = [];
   const unreadCells: string[] = [];
   let carried: RosterSector | undefined;
   let currentDuty: RosterDuty | undefined;
@@ -36,6 +39,9 @@ export function readRoster(columns: DayColumn[], periodStart: string, periodEnd:
         sectors.push(carried); carried = undefined; continue;
       }
       if (NON_DUTY_CODES.has(cell)) {
+        if (PAYROLL_ABSENCE_CODES.has(cell as RosterAbsence['code'])) {
+          absences.push({ code: cell as RosterAbsence['code'], date });
+        }
         i += 1; while (i < cells.length && isPlainTime(cells[i])) i += 1;
         currentDuty = undefined; continue;
       }
@@ -72,7 +78,7 @@ export function readRoster(columns: DayColumn[], periodStart: string, periodEnd:
       unreadCells.push(cell); i += 1;
     }
   }
-  return { sectors, duties, unreadCells };
+  return { sectors, duties, absences, unreadCells };
 }
 
 function readSector(cells: string[], start: number, date: string, duty: RosterDuty): { sector: RosterSector; next: number; continues: boolean } | undefined {
