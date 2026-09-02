@@ -2,13 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SalaryCard } from '@/src/components/SalaryCard';
+import { exportRosterCalendar } from '@/src/domain/calendar';
 import type { Duty } from '@/src/domain/types';
 import { verifyLovedModeCode } from '@/src/domain/lovedMode';
 import { DEFAULT_PROFILE } from '@/src/domain/profile';
-import { detectStationStays, formatStayDuration, sumReportedBlockMinutes } from '@/src/domain/layovers';
+import { sumReportedBlockMinutes } from '@/src/domain/layovers';
 import { formatMinutes, rosterMonthLabel, rosterToDuties } from '@/src/domain/rosterView';
 import { pickAndParseRoster } from '@/src/import/pickRoster';
 import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
+import { clearPayData } from '@/src/storage/payStorage';
 import { clearStoredRosters, loadStoredRosters, upsertStoredRoster } from '@/src/storage/rosterStorage';
 
 type Tab = 'Home' | 'Roster' | 'Money' | 'More';
@@ -38,12 +40,6 @@ export default function IndexScreen() {
   const roster = rosters.find((item) => item.period.start === activeMonth) ?? rosters.at(-1);
   const duties = useMemo(() => roster ? rosterToDuties(roster) : [], [roster]);
   const activeDuty = duties.find((duty) => duty.id === selectedDuty) ?? duties[0];
-  const allStays = useMemo(() => detectStationStays(rosters), [rosters]);
-  const monthStays = useMemo(() => {
-    if (!roster) return [];
-    const month = roster.period.start.slice(0, 7);
-    return allStays.filter((stay) => stay.arrivalLocal.startsWith(month));
-  }, [allStays, roster]);
   const cumulativeBlock = sumReportedBlockMinutes(rosters);
 
   const palette = useMemo<Palette>(() => ({
@@ -108,6 +104,15 @@ export default function IndexScreen() {
     setUnlockError(false);
   };
 
+  const eraseAll = () => {
+    clearStoredRosters();
+    clearPayData();
+    setRosters([]);
+    setActiveMonth(undefined);
+    setSelectedDuty(undefined);
+    setTab('Home');
+  };
+
   return <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]} edges={['top', 'bottom']}>
     <View style={styles.app}>
       <View style={styles.header}>
@@ -115,7 +120,7 @@ export default function IndexScreen() {
           <Text style={[styles.brand, { color: palette.text }]}>KhaVair</Text>
           <Text style={[styles.kicker, { color: palette.muted }]}>CABIN CREW COMPANION</Text>
         </View>
-        <Pressable onPress={requestLovedMode} style={[styles.modeButton, { backgroundColor: palette.surface }]}>
+        <Pressable onPress={requestLovedMode} style={[styles.modeButton, { backgroundColor: palette.surface }]} accessibilityLabel="Loved One Mode">
           <Text style={styles.modeGlyph}>{lovedMode ? '🌹' : '♡'}</Text>
         </Pressable>
       </View>
@@ -123,8 +128,8 @@ export default function IndexScreen() {
       <View style={styles.viewport}>
         {tab === 'Home' && <Home roster={roster} duties={duties} rosters={rosters} cumulativeBlock={cumulativeBlock} palette={palette} onImport={importRoster} importing={importing} />}
         {tab === 'Roster' && <RosterScreen roster={roster} rosters={rosters} duties={duties} activeDuty={activeDuty} palette={palette} importing={importing} error={importError} onImport={importRoster} onSelect={setSelectedDuty} onMonth={changeMonth} />}
-        {tab === 'Money' && <MoneyScreen roster={roster} stays={monthStays} palette={palette} />}
-        {tab === 'More' && <MoreScreen rosters={rosters} palette={palette} onErase={() => { clearStoredRosters(); setRosters([]); setActiveMonth(undefined); setSelectedDuty(undefined); }} />}
+        {tab === 'Money' && <MoneyScreen roster={roster} palette={palette} />}
+        {tab === 'More' && <MoreScreen rosters={rosters} palette={palette} onErase={eraseAll} />}
       </View>
 
       <View style={[styles.tabBar, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
@@ -191,16 +196,37 @@ function Home({ roster, duties, rosters, cumulativeBlock, palette, onImport, imp
 }
 
 function RosterScreen({ roster, rosters, duties, activeDuty, palette, importing, error, onImport, onSelect, onMonth }: { roster?: ParsedAirAstanaRoster; rosters: ParsedAirAstanaRoster[]; duties: Duty[]; activeDuty?: Duty; palette: Palette; importing: boolean; error?: string; onImport: () => void; onSelect: (id: string) => void; onMonth: (direction: -1 | 1) => void }) {
+  const [calendarState, setCalendarState] = useState<'idle' | 'working' | 'done' | 'error'>('idle');
   const index = roster ? rosters.findIndex((item) => item.period.start === roster.period.start) : -1;
+
+  useEffect(() => setCalendarState('idle'), [roster?.period.start]);
+
+  const exportCalendar = async () => {
+    if (!roster || calendarState === 'working') return;
+    setCalendarState('working');
+    try {
+      await exportRosterCalendar(roster);
+      setCalendarState('done');
+    } catch (exportError) {
+      const cancelled = exportError instanceof Error && (exportError.name === 'AbortError' || /cancel/i.test(exportError.message));
+      setCalendarState(cancelled ? 'idle' : 'error');
+    }
+  };
+
   return <View style={styles.screen}>
     <View style={styles.titleRow}>
-      <View>
+      <View style={styles.titleText}>
         <Text style={[styles.sectionTitle, { color: palette.text }]}>{roster ? rosterMonthLabel(roster) : 'Roster'}</Text>
         {roster?.subject && <Text style={[styles.meta, { color: palette.muted }]}>{roster.subject.base ?? '—'} · contract {DEFAULT_PROFILE.contractRank}</Text>}
       </View>
-      <Pressable onPress={onImport} disabled={importing} style={[styles.compactButton, { backgroundColor: palette.accentSoft }]}>
-        {importing ? <ActivityIndicator /> : <Text style={[styles.compactText, { color: palette.accent }]}>{roster ? 'Add month' : 'Import'}</Text>}
-      </Pressable>
+      <View style={styles.titleActions}>
+        {roster && <Pressable onPress={exportCalendar} disabled={calendarState === 'working'} style={[styles.compactButton, { backgroundColor: palette.surface, borderColor: palette.line }]} accessibilityLabel="Export roster to calendar">
+          {calendarState === 'working' ? <ActivityIndicator size="small" /> : <Text style={[styles.compactText, { color: calendarState === 'error' ? palette.rose : palette.text }]}>{calendarState === 'done' ? 'Added' : calendarState === 'error' ? 'Retry' : 'Calendar'}</Text>}
+        </Pressable>}
+        <Pressable onPress={onImport} disabled={importing} style={[styles.compactButton, { backgroundColor: palette.accentSoft, borderColor: palette.accentSoft }]}>
+          {importing ? <ActivityIndicator size="small" /> : <Text style={[styles.compactText, { color: palette.accent }]}>{roster ? 'Add PDF' : 'Import'}</Text>}
+        </Pressable>
+      </View>
     </View>
 
     {roster && rosters.length > 1 && <View style={styles.monthNav}>
@@ -209,7 +235,10 @@ function RosterScreen({ roster, rosters, duties, activeDuty, palette, importing,
       <Pressable disabled={index >= rosters.length - 1} onPress={() => onMonth(1)}><Text style={[styles.monthNavText, { color: index >= rosters.length - 1 ? palette.line : palette.text }]}>Next ›</Text></Pressable>
     </View>}
 
+    {calendarState === 'done' && <Text style={[styles.feedback, { color: palette.muted }]}>Calendar file prepared locally. KhaVair does not read your calendar.</Text>}
+    {calendarState === 'error' && <Text style={[styles.feedback, { color: palette.rose }]}>Calendar export failed. Nothing was uploaded.</Text>}
     {error && <Text style={[styles.error, { color: palette.rose }]}>{error}</Text>}
+
     {!roster ? <Privacy palette={palette} /> : <View style={styles.rosterSplit}>
       <View style={[styles.innerWindow, { backgroundColor: palette.surface, borderColor: palette.line }]}>
         <FlatList
@@ -228,34 +257,18 @@ function RosterScreen({ roster, rosters, duties, activeDuty, palette, importing,
   </View>;
 }
 
-function MoneyScreen({ roster, stays, palette }: { roster?: ParsedAirAstanaRoster; stays: ReturnType<typeof detectStationStays>; palette: Palette }) {
+function MoneyScreen({ roster, palette }: { roster?: ParsedAirAstanaRoster; palette: Palette }) {
   if (!roster) return <View style={styles.screen}>
     <Text style={[styles.sectionTitle, { color: palette.text }]}>Money</Text>
     <Card palette={palette}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster first.</Text></Card>
   </View>;
 
-  const candidates = stays.filter((stay) => stay.durationMinutes > 120);
   return <View style={styles.screen}>
     <Text style={[styles.sectionTitle, { color: palette.text }]}>Money</Text>
     <SalaryCard roster={roster} palette={palette} />
-    <View style={[styles.innerWindow, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-      <FlatList
-        data={candidates}
-        keyExtractor={(item) => `${item.arrivalLocal}-${item.station}`}
-        contentContainerStyle={styles.listContent}
-        ListHeaderComponent={<View style={[styles.perDiemHeader, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
-          <Text style={[styles.label, { color: palette.muted }]}>PER DIEM STAYS · {rosterMonthLabel(roster)}</Text>
-          <Text style={[styles.meta, { color: palette.muted }]}>Qualifying stays are shown here; currency totals are the next Money layer.</Text>
-        </View>}
-        ListEmptyComponent={<Text style={[styles.meta, { color: palette.muted }]}>No station stay longer than 2 hours detected.</Text>}
-        renderItem={({ item }) => <View style={[styles.stayCard, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
-          <View style={styles.sectorHeader}>
-            <Text style={[styles.stayStation, { color: palette.text }]}>{item.station}</Text>
-            <Text style={[styles.stayDuration, { color: palette.accent }]}>{formatStayDuration(item.durationMinutes)}</Text>
-          </View>
-          <Text style={[styles.meta, { color: palette.muted }]}>KC{item.arrivalFlight} → KC{item.departureFlight}{item.crossMonth ? ' · crosses month' : ''}</Text>
-        </View>}
-      />
+    <View style={[styles.moneyHint, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+      <Text style={[styles.cardTitle, { color: palette.text }]}>Tap the card for details</Text>
+      <Text style={[styles.meta, { color: palette.muted }]}>Per-diem relays, NBRK conversion and the salary breakdown scroll inside the sheet — the main app stays fixed.</Text>
     </View>
   </View>;
 }
@@ -272,7 +285,11 @@ function MoreScreen({ rosters, palette, onErase }: { rosters: ParsedAirAstanaRos
       <Text style={[styles.cardTitle, { color: palette.text }]}>Local roster library</Text>
       <Text style={[styles.meta, { color: palette.muted }]}>{rosters.length ? rosters.map(rosterMonthLabel).join(' · ') : 'No months imported'}</Text>
     </Card>
-    {rosters.length > 0 && <Pressable onPress={onErase} style={[styles.secondaryButton, { borderColor: palette.line }]}><Text style={[styles.secondaryText, { color: palette.text }]}>Erase all roster data</Text></Pressable>}
+    <Card palette={palette}>
+      <Text style={[styles.cardTitle, { color: palette.text }]}>Privacy</Text>
+      <Text style={[styles.meta, { color: palette.muted }]}>Roster PDFs, crew lists and salary settings are processed locally. Only public MRP and USD/KZT values may be requested from official sources.</Text>
+    </Card>
+    {rosters.length > 0 && <Pressable onPress={onErase} style={[styles.secondaryButton, { borderColor: palette.line }]}><Text style={[styles.secondaryText, { color: palette.text }]}>Erase local roster & pay data</Text></Pressable>}
   </View>;
 }
 
@@ -292,7 +309,7 @@ function DutyDetail({ duty, palette }: { duty: Duty; palette: Palette }) {
         <Text style={[styles.flyingWith, { color: palette.accent }]}>Flying with · {item.crew.length}</Text>
         {item.crew.map((member) => <View key={member.id} style={styles.crewRow}>
           <View style={[styles.avatar, { backgroundColor: palette.accentSoft }]}><Text style={[styles.avatarText, { color: palette.accent }]}>{member.name[0]}</Text></View>
-          <View style={{ flex: 1 }}><Text style={[styles.crewName, { color: palette.text }]}>{member.name}</Text><Text style={[styles.meta, { color: palette.muted }]}>{member.position}</Text></View>
+          <View style={styles.crewText}><Text style={[styles.crewName, { color: palette.text }]}>{member.name}</Text><Text style={[styles.meta, { color: palette.muted }]}>{member.position}</Text></View>
         </View>)}
       </View>}
     />
@@ -332,11 +349,14 @@ const styles = StyleSheet.create({
   privacy: { borderWidth: 1, borderRadius: 20, padding: 14 },
   primaryButton: { height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   actionText: { color: '#fff', fontWeight: '700' },
-  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  titleText: { flex: 1, minWidth: 0 },
+  titleActions: { flexDirection: 'row', gap: 7 },
   monthNav: { height: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   monthNavText: { fontSize: 12, fontWeight: '600' },
-  compactButton: { height: 38, minWidth: 76, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  compactText: { fontWeight: '700', fontSize: 13 },
+  compactButton: { height: 38, minWidth: 72, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  compactText: { fontWeight: '700', fontSize: 12 },
+  feedback: { fontSize: 11, lineHeight: 15 },
   error: { fontSize: 12 },
   rosterSplit: { flex: 1, minHeight: 0, gap: 10 },
   innerWindow: { flex: 1, minHeight: 100, borderWidth: 1, borderRadius: 20, overflow: 'hidden' },
@@ -349,13 +369,11 @@ const styles = StyleSheet.create({
   sectorRoute: { fontSize: 19, fontWeight: '700' },
   flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 9, marginBottom: 4 },
   crewRow: { minHeight: 42, flexDirection: 'row', alignItems: 'center' },
+  crewText: { flex: 1 },
   avatar: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 9 },
   avatarText: { fontSize: 11, fontWeight: '800' },
   crewName: { fontSize: 13, fontWeight: '600' },
-  perDiemHeader: { borderWidth: 1, borderRadius: 16, padding: 13, gap: 4 },
-  stayCard: { borderWidth: 1, borderRadius: 16, padding: 13 },
-  stayStation: { fontSize: 19, fontWeight: '700' },
-  stayDuration: { fontSize: 13, fontWeight: '700' },
+  moneyHint: { borderWidth: 1, borderRadius: 20, padding: 14 },
   secondaryButton: { height: 48, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { fontWeight: '600' },
   tabBar: { height: 64, marginTop: 10, marginBottom: 4, borderWidth: 1, borderRadius: 22, flexDirection: 'row' },
