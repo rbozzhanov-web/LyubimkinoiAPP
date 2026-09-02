@@ -15,5 +15,7 @@ jobs:
           node-version: 22
       - run: npm install --ignore-scripts
       - run: npm run typecheck
+      - name: Domain smoke tests
+        run: npm run test:domain
       - name: Build web bundle
         run: npx expo export --platform web --output-dir dist
