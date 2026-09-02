@@ -141,7 +141,7 @@ export default function MainScreen() {
         {tab === 'More' && <MoreScreen rosters={rosters} palette={palette} onErase={eraseAll} onSalarySettings={() => setSalarySettingsOpen(true)} />}
       </SwipeSurface>
 
-      <View style={[styles.tabBar, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}> 
+      <View style={[styles.tabBar, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
         {TABS.map((item) => {
           const active = item === tab;
           return <Pressable key={item} onPress={() => { setSelectedFlight(undefined); setTab(item); }} style={styles.tabItem} accessibilityRole="tab" accessibilityState={{ selected: active }}>
@@ -154,7 +154,7 @@ export default function MainScreen() {
 
     <Modal visible={unlockOpen} transparent animationType="fade" onRequestClose={() => setUnlockOpen(false)}>
       <View style={styles.modalBackdrop}>
-        <View style={[styles.unlockCard, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}> 
+        <View style={[styles.unlockCard, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
           <Text style={[styles.label, { color: palette.rose }]}>FOR SOMEONE SPECIAL</Text>
           <Text style={[styles.unlockTitle, { color: palette.text }]}>Enter the code</Text>
           <TextInput autoFocus value={unlockCode} secureTextEntry keyboardType="number-pad" maxLength={7}
@@ -200,7 +200,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
 
   return <View style={styles.screen}>
     <Text style={[styles.label, { color: palette.muted }]}>{isUpcoming ? 'NEXT DUTY' : isActive ? 'CURRENT DUTY' : 'LATEST DUTY'} · {duty.dateLabel}</Text>
-    <View style={[styles.heroCard, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}> 
+    <View style={[styles.heroCard, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
       <View style={styles.heroTop}>
         <View style={styles.grow}>
           <Text style={[styles.label, { color: palette.accent }]}>REPORTING</Text>
@@ -260,7 +260,7 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, import
     </SwipeSurface>}
     {error && <Text style={[styles.error, { color: palette.rose }]}>{error}</Text>}
 
-    {!roster ? <View style={[styles.emptyCard, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster PDF to begin.</Text></View> : <View style={[styles.innerWindow, { backgroundColor: palette.surface, borderColor: palette.line }]}> 
+    {!roster ? <View style={[styles.emptyCard, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster PDF to begin.</Text></View> : <View style={[styles.innerWindow, { backgroundColor: palette.surface, borderColor: palette.line }]}>
       <FlatList data={flights} keyExtractor={({ sector }) => sector.id} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}
         renderItem={({ item: { duty, sector } }) => <Pressable onPress={() => onSelect(sector.id)} style={[styles.rosterCard, { backgroundColor: selectedSector?.id === sector.id ? palette.accentSoft : palette.surfaceStrong, borderColor: palette.line }]}>
           <View style={styles.flightCardTop}><Text style={[styles.label, { color: palette.muted }]}>{duty.dateLabel}</Text><Text style={[styles.flightNumber, { color: palette.muted }]}>{sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text></View>
@@ -344,8 +344,8 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.8 }, intro: { fontSize: 15, lineHeight: 22 }, label: { fontSize: 10, fontWeight: '700', letterSpacing: 1.05 }, meta: { fontSize: 12, lineHeight: 17 },
   heroCard: { borderWidth: 1, borderRadius: 26, padding: 18 }, heroTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, reportTime: { fontSize: 52, lineHeight: 57, fontWeight: '800', letterSpacing: -2.2, marginTop: 2 },
   countdownBox: { minWidth: 122, borderRadius: 17, paddingHorizontal: 11, paddingVertical: 9, alignItems: 'flex-end' }, countdown: { fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'] }, countdownLabel: { fontSize: 8, fontWeight: '700', letterSpacing: .7, marginTop: 2 },
-  heroRoute: { fontSize: 29, lineHeight: 34, fontWeight: '750', marginTop: 11 }, heroFlight: { fontSize: 11, fontWeight: '600', marginTop: 2 }, timeDivider: { height: StyleSheet.hairlineWidth, marginVertical: 14 },
-  timeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 }, timeMetric: { flex: 1, minWidth: 0 }, timeLabel: { fontSize: 8, lineHeight: 11, fontWeight: '700', letterSpacing: .6 }, departureTime: { fontSize: 30, lineHeight: 34, fontWeight: '750', marginTop: 2 }, arrivalTime: { fontSize: 24, lineHeight: 29, fontWeight: '700', marginTop: 2 }, releaseTime: { fontSize: 19, lineHeight: 24, fontWeight: '650', marginTop: 2 },
+  heroRoute: { fontSize: 29, lineHeight: 34, fontWeight: '700', marginTop: 11 }, heroFlight: { fontSize: 11, fontWeight: '600', marginTop: 2 }, timeDivider: { height: StyleSheet.hairlineWidth, marginVertical: 14 },
+  timeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 }, timeMetric: { flex: 1, minWidth: 0 }, timeLabel: { fontSize: 8, lineHeight: 11, fontWeight: '700', letterSpacing: .6 }, departureTime: { fontSize: 30, lineHeight: 34, fontWeight: '700', marginTop: 2 }, arrivalTime: { fontSize: 24, lineHeight: 29, fontWeight: '700', marginTop: 2 }, releaseTime: { fontSize: 19, lineHeight: 24, fontWeight: '600', marginTop: 2 },
   summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14, minHeight: 112 }, summaryValue: { fontSize: 25, fontWeight: '700', marginTop: 8 },
   primaryButton: { height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }, actionText: { color: '#fff', fontWeight: '700' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, titleActions: { flexDirection: 'row', gap: 7 }, compactButton: { height: 38, minWidth: 72, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 }, compactText: { fontWeight: '700', fontSize: 12 },
