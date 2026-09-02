@@ -132,6 +132,7 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, WEB_OPACITY_LAYER, { opacity: dimOpacity }]} />
       <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close overlay" />
       <Animated.View
+        pointerEvents="box-none"
         accessibilityViewIsModal
         style={[styles.sheetMotion, WEB_TRANSFORM_LAYER, { transform: [{ translateY }] }]}
       >
@@ -210,7 +211,10 @@ const styles = StyleSheet.create({
   dim: { backgroundColor: '#000' },
   sheetMotion: {
     width: '100%',
+    height: '100%',
     alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   sheetBase: {
     width: '100%',
