@@ -8,6 +8,7 @@
     "web": "expo start --web",
     "android": "expo start --android",
     "ios": "expo start --ios",
+    "build:web": "expo export --platform web --output-dir dist && node scripts/make-sw.mjs",
     "typecheck": "tsc --noEmit",
     "test:domain": "tsx scripts/domain-smoke.ts"
   },
