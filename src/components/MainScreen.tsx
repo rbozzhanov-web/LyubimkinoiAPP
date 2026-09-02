@@ -34,6 +34,9 @@ type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'lin
 type FlightRow = { duty: Duty; sector: Sector };
 type RosterDuty = { roster: ParsedAirAstanaRoster; duty: Duty };
 type FocusDuty = RosterDuty & { reportMs: number; releaseMs: number };
+const WEB_GLASS = Platform.OS === 'web'
+  ? ({ backdropFilter: 'blur(22px) saturate(1.18)', WebkitBackdropFilter: 'blur(22px) saturate(1.18)' } as any)
+  : undefined;
 
 export default function MainScreen() {
   // The web build is prerendered to static HTML with the light palette baked into inline
@@ -77,8 +80,8 @@ export default function MainScreen() {
 
   const palette = useMemo<Palette>(() => ({
     background: lovedMode ? (dark ? '#1B1114' : '#FFF0E8') : (dark ? '#11110F' : '#F4F1EC'),
-    surface: lovedMode ? (dark ? '#24171A' : '#FFF7F2') : (dark ? '#1B1A18' : '#FCFAF7'),
-    surfaceStrong: lovedMode ? (dark ? '#2C1B20' : '#FFFFFF') : (dark ? '#25231F' : '#FFFFFF'),
+    surface: lovedMode ? (dark ? 'rgba(36,23,26,.76)' : 'rgba(255,247,242,.76)') : (dark ? 'rgba(27,26,24,.78)' : 'rgba(252,250,247,.78)'),
+    surfaceStrong: lovedMode ? (dark ? 'rgba(44,27,32,.84)' : 'rgba(255,255,255,.84)') : (dark ? 'rgba(37,35,31,.84)' : 'rgba(255,255,255,.84)'),
     text: lovedMode ? (dark ? '#FFF5F2' : '#2B1718') : (dark ? '#F7F4EF' : '#171714'),
     muted: lovedMode ? (dark ? '#DCB2AB' : '#7A4A45') : (dark ? '#B5AFA4' : '#5F5C55'),
     line: lovedMode ? (dark ? '#5A363E' : '#EFB4A3') : (dark ? '#37342E' : '#DED7CB'),
@@ -176,7 +179,7 @@ export default function MainScreen() {
         {tab === 'More' && <MoreScreen rosters={rosters} palette={palette} onErase={eraseAll} onSalarySettings={() => setSalarySettingsOpen(true)} />}
       </SwipeSurface>
 
-      <View style={[styles.tabBar, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+      <View style={[styles.tabBar, styles.depthSurface, WEB_GLASS, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
         {TABS.map((item) => {
           const active = item === tab;
           return <Pressable key={item} onPress={() => { setSelectedFlight(undefined); setTab(item); }} style={styles.tabItem} accessibilityRole="tab" accessibilityState={{ selected: active }}>
@@ -189,7 +192,7 @@ export default function MainScreen() {
 
     <Modal visible={unlockOpen} transparent animationType="fade" onRequestClose={() => setUnlockOpen(false)}>
       <View style={styles.modalBackdrop}>
-        <View style={[styles.unlockCard, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+        <View style={[styles.unlockCard, styles.depthSurface, WEB_GLASS, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
           <Text style={[styles.label, { color: palette.rose }]}>FOR SOMEONE SPECIAL</Text>
           <Text style={[styles.unlockTitle, { color: palette.text }]}>Enter the code</Text>
           <TextInput autoFocus value={unlockCode} secureTextEntry keyboardType="number-pad" maxLength={7}
@@ -250,7 +253,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
       <Text style={[styles.label, { color: palette.muted }]}>{duty.dateLabel}</Text>
     </View>
 
-    <View style={[styles.heroCard, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+    <View style={[styles.heroCard, styles.depthSurface, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
       <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.heroRoute, { color: palette.text }]}>{routeChain(duty)}</Text>
       <View style={[styles.heroMetaRow, countdown ? styles.heroMetaRowTall : undefined]}>
         <Text numberOfLines={1} style={[styles.heroFlight, { color: palette.muted }]}>{duty.sectors.map((sector) => sector.flightNumber).join(' · ')}</Text>
@@ -330,7 +333,7 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, import
     </SwipeSurface>}
     {error && <Text style={[styles.error, { color: palette.rose }]}>{error}</Text>}
 
-    {!roster ? <View style={[styles.emptyCard, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster PDF to begin.</Text></View> : <View style={[styles.innerWindow, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+    {!roster ? <View style={[styles.emptyCard, styles.depthSurface, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster PDF to begin.</Text></View> : <View style={[styles.innerWindow, styles.depthSurface, { backgroundColor: palette.surface, borderColor: palette.line }]}>
       <FlatList data={flights} keyExtractor={({ sector }) => sector.id} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}
         renderItem={({ item: { duty, sector } }) => <Pressable onPress={() => onSelect(sector.id)} style={[styles.rosterCard, { backgroundColor: selectedSector?.id === sector.id ? palette.accentSoft : palette.surfaceStrong, borderColor: palette.line }]}>
           <View style={styles.flightCardTop}><Text style={[styles.label, { color: palette.muted }]}>{duty.dateLabel}</Text><Text style={[styles.flightNumber, { color: palette.muted }]}>{sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text></View>
@@ -344,14 +347,14 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, import
 }
 
 function MoneyScreen({ roster, palette }: { roster?: ParsedAirAstanaRoster; palette: Palette }) {
-  return <View style={styles.screen}><Text style={[styles.sectionTitle, { color: palette.text }]}>Money</Text>{roster ? <SalaryCard roster={roster} palette={palette} /> : <View style={[styles.emptyCard, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster first.</Text></View>}</View>;
+  return <View style={styles.screen}><Text style={[styles.sectionTitle, { color: palette.text }]}>Money</Text>{roster ? <SalaryCard roster={roster} palette={palette} /> : <View style={[styles.emptyCard, styles.depthSurface, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster first.</Text></View>}</View>;
 }
 
 function MoreScreen({ rosters, palette, onErase, onSalarySettings }: { rosters: ParsedAirAstanaRoster[]; palette: Palette; onErase: () => void; onSalarySettings: () => void }) {
   return <View style={styles.screen}>
     <Text style={[styles.sectionTitle, { color: palette.text }]}>More</Text>
     <InfoCard title="Profile" palette={palette}><Text style={[styles.meta, { color: palette.muted }]}>Contract position · {DEFAULT_PROFILE.contractRank}</Text><Text style={[styles.meta, { color: palette.muted }]}>Roster rank is display-only and never changes pay.</Text></InfoCard>
-    <Pressable onPress={onSalarySettings} style={[styles.settingsCard, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}><View style={styles.grow}><Text style={[styles.cardTitle, { color: palette.text }]}>Salary settings</Text><Text style={[styles.meta, { color: palette.muted }]}>Optional customization for another crew member</Text></View><Text style={[styles.chevron, { color: palette.accent }]}>›</Text></Pressable>
+    <Pressable onPress={onSalarySettings} style={[styles.settingsCard, styles.depthSurface, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}><View style={styles.grow}><Text style={[styles.cardTitle, { color: palette.text }]}>Salary settings</Text><Text style={[styles.meta, { color: palette.muted }]}>Optional customization for another crew member</Text></View><Text style={[styles.chevron, { color: palette.accent }]}>›</Text></Pressable>
     <InfoCard title="Local roster library" palette={palette}><Text style={[styles.meta, { color: palette.muted }]}>{rosters.length ? rosters.map(rosterMonthLabel).join(' · ') : 'No months imported'}</Text></InfoCard>
     <InfoCard title="Privacy" palette={palette}><Text style={[styles.meta, { color: palette.muted }]}>Roster PDFs, crew lists and salary settings are processed locally. Only public MRP and USD/KZT values may be requested from official sources.</Text></InfoCard>
     {rosters.length > 0 && <Pressable onPress={onErase} style={[styles.secondaryButton, { borderColor: palette.line }]}><Text style={[styles.secondaryText, { color: palette.text }]}>Erase local roster & pay data</Text></Pressable>}
@@ -364,7 +367,7 @@ function FlightDetail({ sector, dateLabel, palette, onClose, onPrevious, onNext 
     onClose={onClose}
     handleColor={palette.line}
     backdropOpacity={0.42}
-    style={[styles.flightSheet, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
+    style={[styles.flightSheet, WEB_GLASS, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
   >
     {(dismiss) => <SwipeSurface style={styles.flightSheetContent} onSwipeDown={dismiss} onSwipeLeft={onNext} onSwipeRight={onPrevious} threshold={44}>
       <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text><Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime}</Text></View><Pressable onPress={dismiss} style={[styles.sheetClose, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.sheetCloseText, { color: palette.text }]}>×</Text></Pressable></View>
@@ -419,8 +422,8 @@ function formatCountdown(milliseconds: number): string {
 function routeChain(duty: Duty): string { return [duty.sectors[0]?.departure, ...duty.sectors.map((sector) => sector.arrival)].filter(Boolean).join(' → '); }
 function TimeCell({ label, value, palette }: { label: string; value: string; palette: Palette }) { return <View style={styles.timeCell}><Text numberOfLines={1} style={[styles.timeLabel, { color: palette.muted }]}>{label}</Text><Text style={[styles.timeValue, { color: palette.text }]}>{value}</Text></View>; }
 function PrimaryButton({ title, onPress, loading, palette }: { title: string; onPress: () => void; loading: boolean; palette: Palette }) { return <Pressable onPress={onPress} disabled={loading} style={[styles.primaryButton, { backgroundColor: palette.accent }]}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionText}>{title}</Text>}</Pressable>; }
-function Summary({ title, value, detail, palette }: { title: string; value: string; detail: string; palette: Palette }) { return <View style={[styles.summary, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.label, { color: palette.muted }]}>{title}</Text><Text style={[styles.summaryValue, { color: palette.text }]}>{value}</Text><Text style={[styles.meta, { color: palette.muted }]}>{detail}</Text></View>; }
-function InfoCard({ title, children, palette }: { title: string; children: React.ReactNode; palette: Palette }) { return <View style={[styles.infoCard, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}><Text style={[styles.cardTitle, { color: palette.text }]}>{title}</Text>{children}</View>; }
+function Summary({ title, value, detail, palette }: { title: string; value: string; detail: string; palette: Palette }) { return <View style={[styles.summary, styles.depthSurface, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.label, { color: palette.muted }]}>{title}</Text><Text style={[styles.summaryValue, { color: palette.text }]}>{value}</Text><Text style={[styles.meta, { color: palette.muted }]}>{detail}</Text></View>; }
+function InfoCard({ title, children, palette }: { title: string; children: React.ReactNode; palette: Palette }) { return <View style={[styles.infoCard, styles.depthSurface, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}><Text style={[styles.cardTitle, { color: palette.text }]}>{title}</Text>{children}</View>; }
 function operatingCount(roster: ParsedAirAstanaRoster) { return roster.sectors.filter((sector) => !sector.deadhead).length; }
 
 const styles = StyleSheet.create({
@@ -446,6 +449,7 @@ const styles = StyleSheet.create({
   monthNav: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, monthNavText: { fontSize: 12, fontWeight: '600' }, error: { fontSize: 12 },
   emptyCard: { borderWidth: 1, borderRadius: 20, padding: 14 }, innerWindow: { flex: 1, minHeight: 0, borderWidth: 1, borderRadius: 20, overflow: 'hidden' }, listContent: { padding: 8, gap: 7, paddingBottom: 18 }, rosterCard: { borderWidth: 1, borderRadius: 16, padding: 13 }, flightCardTop: { flexDirection: 'row', justifyContent: 'space-between' }, flightNumber: { fontSize: 11, fontWeight: '700' }, rosterRoute: { fontSize: 20, fontWeight: '700', marginTop: 4 },
   infoCard: { borderWidth: 1, borderRadius: 20, padding: 14, gap: 3 }, cardTitle: { fontSize: 15, fontWeight: '700' }, settingsCard: { minHeight: 68, borderWidth: 1, borderRadius: 20, padding: 14, flexDirection: 'row', alignItems: 'center' }, chevron: { fontSize: 30 }, secondaryButton: { height: 48, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, secondaryText: { fontWeight: '600' },
+  depthSurface: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 20, elevation: 4 },
   tabBar: { height: 68, marginTop: 8, marginBottom: 4, borderWidth: 1, borderRadius: 22, flexDirection: 'row' }, tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabIconWrap: { minWidth: 35, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, tabIcon: { textAlign: 'center' }, tabText: { fontSize: 11, fontWeight: '600' },
   sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end' }, flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderTopWidth: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 18, paddingBottom: 12, overflow: 'hidden' }, flightSheetContent: { minHeight: 0 }, sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }, sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 }, sheetClose: { width: 44, height: 44, borderWidth: 1, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }, sheetCloseText: { fontSize: 27 }, swipeHint: { fontSize: 10, marginTop: 7 }, flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 7 }, crewList: { paddingBottom: 12 }, crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' }, avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, avatarText: { fontSize: 12, fontWeight: '800' }, crewName: { fontSize: 14, fontWeight: '600' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.46)', alignItems: 'center', justifyContent: 'center', padding: 20 }, unlockCard: { width: '100%', maxWidth: 390, borderWidth: 1, borderRadius: 26, padding: 20 }, unlockTitle: { fontSize: 26, fontWeight: '700', marginTop: 7 }, codeInput: { height: 54, borderWidth: 1, borderRadius: 15, marginTop: 18, paddingHorizontal: 16, fontSize: 22, letterSpacing: 5, textAlign: 'center' }, codeHint: { fontSize: 11, marginTop: 6 }, actions: { flexDirection: 'row', gap: 9, marginTop: 18 }, action: { flex: 1, height: 46, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
