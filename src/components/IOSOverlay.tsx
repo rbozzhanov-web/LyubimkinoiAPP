@@ -1,0 +1,201 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  Animated,
+  Easing,
+  Modal,
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+
+type RenderChildren = ReactNode | ((dismiss: () => void) => ReactNode);
+
+type SheetProps = {
+  visible: boolean;
+  onClose: () => void;
+  children: RenderChildren;
+  style?: StyleProp<ViewStyle>;
+  handleColor: string;
+  backdropOpacity?: number;
+};
+
+type DialogProps = {
+  visible: boolean;
+  onClose: () => void;
+  children: RenderChildren;
+  style?: StyleProp<ViewStyle>;
+  backdropOpacity?: number;
+  dismissOnBackdrop?: boolean;
+};
+
+const SPRING = { stiffness: 360, damping: 34, mass: 0.82, useNativeDriver: true } as const;
+
+export function IOSSheet({ visible, onClose, children, style, handleColor, backdropOpacity = 0.46 }: SheetProps) {
+  const [mounted, setMounted] = useState(visible);
+  const presentation = useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const dragY = useRef(new Animated.Value(0)).current;
+  const closing = useRef(false);
+  const sheetHeight = useRef(640);
+
+  const animateOut = useCallback((notify: boolean) => {
+    if (closing.current) return;
+    closing.current = true;
+    const distance = Math.max(360, sheetHeight.current + 48);
+    Animated.parallel([
+      Animated.timing(presentation, {
+        toValue: 0,
+        duration: 210,
+        easing: Easing.bezier(0.32, 0.72, 0, 1),
+        useNativeDriver: true,
+      }),
+      Animated.timing(dragY, {
+        toValue: distance,
+        duration: 210,
+        easing: Easing.bezier(0.32, 0.72, 0, 1),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setMounted(false);
+      if (notify) onClose();
+    });
+  }, [dragY, onClose, presentation]);
+
+  const dismiss = useCallback(() => animateOut(true), [animateOut]);
+
+  useEffect(() => {
+    if (!visible) {
+      if (mounted && !closing.current) animateOut(false);
+      closing.current = false;
+      return;
+    }
+    if (!mounted && !closing.current) setMounted(true);
+  }, [animateOut, mounted, visible]);
+
+  useEffect(() => {
+    if (!mounted || !visible || closing.current) return;
+    presentation.stopAnimation();
+    dragY.stopAnimation();
+    presentation.setValue(0);
+    dragY.setValue(0);
+    Animated.spring(presentation, { toValue: 1, ...SPRING }).start();
+  }, [dragY, mounted, presentation, visible]);
+
+  const responder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) => gesture.dy > 2 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.1,
+    onPanResponderGrant: () => dragY.stopAnimation(),
+    onPanResponderMove: (_, gesture) => {
+      const raw = Math.max(0, gesture.dy);
+      const resisted = raw <= 300 ? raw : 300 + (raw - 300) * 0.28;
+      dragY.setValue(resisted);
+    },
+    onPanResponderRelease: (_, gesture) => {
+      const fast = gesture.dy > 22 && gesture.vy > 0.72;
+      if (gesture.dy > 86 || fast) dismiss();
+      else Animated.spring(dragY, { toValue: 0, ...SPRING }).start();
+    },
+    onPanResponderTerminate: () => Animated.spring(dragY, { toValue: 0, ...SPRING }).start(),
+    onPanResponderTerminationRequest: () => true,
+  }), [dismiss, dragY]);
+
+  if (!mounted) return null;
+
+  const introY = presentation.interpolate({ inputRange: [0, 1], outputRange: [34, 0] });
+  const translateY = Animated.add(introY, dragY);
+  const scale = presentation.interpolate({ inputRange: [0, 1], outputRange: [0.985, 1] });
+  const baseDim = presentation.interpolate({ inputRange: [0, 1], outputRange: [0, backdropOpacity] });
+  const dragDim = dragY.interpolate({ inputRange: [0, 480], outputRange: [1, 0], extrapolate: 'clamp' });
+  const dimOpacity = Animated.multiply(baseDim, dragDim);
+  const content = typeof children === 'function' ? children(dismiss) : children;
+
+  return <Modal visible transparent animationType="none" presentationStyle="overFullScreen" onRequestClose={dismiss}>
+    <View style={styles.fill}>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, { opacity: dimOpacity }]} />
+      <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close overlay" />
+      <Animated.View
+        accessibilityViewIsModal
+        onLayout={(event) => { sheetHeight.current = event.nativeEvent.layout.height; }}
+        style={[styles.sheetBase, style, { opacity: presentation, transform: [{ translateY }, { scale }] }]}
+      >
+        <View style={styles.grabberTouch} {...responder.panHandlers}>
+          <View style={[styles.grabber, { backgroundColor: handleColor }]} />
+        </View>
+        {content}
+      </Animated.View>
+    </View>
+  </Modal>;
+}
+
+export function IOSDialog({ visible, onClose, children, style, backdropOpacity = 0.46, dismissOnBackdrop = true }: DialogProps) {
+  const [mounted, setMounted] = useState(visible);
+  const presentation = useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const closing = useRef(false);
+
+  const animateOut = useCallback((notify: boolean) => {
+    if (closing.current) return;
+    closing.current = true;
+    Animated.timing(presentation, {
+      toValue: 0,
+      duration: 155,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      setMounted(false);
+      if (notify) onClose();
+    });
+  }, [onClose, presentation]);
+
+  const dismiss = useCallback(() => animateOut(true), [animateOut]);
+
+  useEffect(() => {
+    if (!visible) {
+      if (mounted && !closing.current) animateOut(false);
+      closing.current = false;
+      return;
+    }
+    if (!mounted && !closing.current) setMounted(true);
+  }, [animateOut, mounted, visible]);
+
+  useEffect(() => {
+    if (!mounted || !visible || closing.current) return;
+    presentation.stopAnimation();
+    presentation.setValue(0);
+    Animated.spring(presentation, { toValue: 1, stiffness: 420, damping: 32, mass: 0.72, useNativeDriver: true }).start();
+  }, [mounted, presentation, visible]);
+
+  if (!mounted) return null;
+
+  const scale = presentation.interpolate({ inputRange: [0, 1], outputRange: [0.93, 1] });
+  const translateY = presentation.interpolate({ inputRange: [0, 1], outputRange: [14, 0] });
+  const dimOpacity = presentation.interpolate({ inputRange: [0, 1], outputRange: [0, backdropOpacity] });
+  const content = typeof children === 'function' ? children(dismiss) : children;
+
+  return <Modal visible transparent animationType="none" presentationStyle="overFullScreen" onRequestClose={dismiss}>
+    <View style={[styles.fill, styles.dialogHost]}>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, { opacity: dimOpacity }]} />
+      {dismissOnBackdrop && <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close dialog" />}
+      <Animated.View accessibilityViewIsModal style={[style, { opacity: presentation, transform: [{ translateY }, { scale }] }]}>
+        {content}
+      </Animated.View>
+    </View>
+  </Modal>;
+}
+
+const styles = StyleSheet.create({
+  fill: { flex: 1, justifyContent: 'flex-end' },
+  dim: { backgroundColor: '#000' },
+  sheetBase: {
+    width: '100%',
+    alignSelf: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
+    elevation: 24,
+  },
+  grabberTouch: { height: 28, alignItems: 'center', justifyContent: 'center' },
+  grabber: { width: 36, height: 5, borderRadius: 3, opacity: 0.72 },
+  dialogHost: { alignItems: 'center', justifyContent: 'center', padding: 20 },
+});
