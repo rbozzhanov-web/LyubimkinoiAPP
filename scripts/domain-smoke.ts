@@ -5,6 +5,7 @@ import type { ParsedAirAstanaRoster } from '../src/import/parseAirAstanaRoster';
 import { extractCrewRecords } from '../src/import/crew';
 import { stationLocalDateTimeMs } from '../src/domain/stationTime';
 import { clearLovedMode, loadLovedMode, saveLovedMode } from '../src/storage/lovedModeStorage';
+import { swipeAxis } from '../src/domain/gesture';
 import type { ExtractedPage, TextItem } from '../src/import/types';
 
 const MRP_2026 = 4325;
@@ -28,6 +29,10 @@ saveLovedMode();
 equal(loadLovedMode(), true, 'special mode survives an app relaunch on this device');
 clearLovedMode();
 equal(loadLovedMode(), false, 'turning special mode off clears its local activation');
+
+equal(swipeAxis(48, 20, true, false), 'horizontal', 'dominant horizontal movement drags the screen layer');
+equal(swipeAxis(16, 48, false, true), 'down', 'dominant downward movement drags the sheet layer');
+equal(swipeAxis(20, 20, true, true), undefined, 'diagonal movement does not steal scroll gestures');
 
 function stay(station: string, arrivalLocal: string, departureLocal: string, durationMinutes: number): StationStay {
   return {
