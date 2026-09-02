@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
 import type { PayMonthOverrides, PayProfile } from '@/src/domain/pay';
 import { loadPayMonth, loadPayProfile, savePayMonth, savePayProfile } from '@/src/storage/payStorage';
-import { SwipeSurface } from './SwipeSurface';
+import { IOSSheet } from './IOSOverlay';
 
 type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua', string>;
 
@@ -32,7 +32,7 @@ export function SalarySettingsSheet({ visible, roster, palette, onClose, onSaved
     setError(undefined);
   }, [visible, monthKey]);
 
-  const save = () => {
+  const save = (dismiss: () => void) => {
     const hourlyRate = numberFrom(draft.hourlyRate);
     const monthlySalary = numberFrom(draft.monthlySalary);
     const monthlyTransport = numberFrom(draft.monthlyTransport);
@@ -58,53 +58,55 @@ export function SalarySettingsSheet({ visible, roster, palette, onClose, onSaved
       savePayMonth(monthKey, overrides);
     }
     onSaved();
-    onClose();
+    dismiss();
   };
 
   const sickDays = roster?.absences?.filter((item) => item.code === 'SICK').length ?? 0;
   const vacationDays = roster?.absences?.filter((item) => item.code === 'VAC').length ?? 0;
   const deadheadSectors = roster?.sectors.filter((item) => item.deadhead).length ?? 0;
 
-  return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-    <View style={styles.backdrop}>
-      <SwipeSurface style={[styles.sheet, { backgroundColor: palette.background, borderColor: palette.line }]} onSwipeDown={onClose}>
-        <View style={[styles.handle, { backgroundColor: palette.line }]} />
-        <View style={styles.header}>
-          <View style={styles.grow}>
-            <Text style={[styles.title, { color: palette.text }]}>Salary settings</Text>
-            <Text style={[styles.meta, { color: palette.muted }]}>Optional · stored only on this device</Text>
-          </View>
-          <Pressable onPress={onClose} style={[styles.close, { backgroundColor: palette.surface }]}><Text style={[styles.closeText, { color: palette.text }]}>×</Text></Pressable>
+  return <IOSSheet
+    visible={visible}
+    onClose={onClose}
+    handleColor={palette.line}
+    style={[styles.sheet, { backgroundColor: palette.background, borderColor: palette.line }]}
+  >
+    {(dismiss) => <>
+      <View style={styles.header}>
+        <View style={styles.grow}>
+          <Text style={[styles.title, { color: palette.text }]}>Salary settings</Text>
+          <Text style={[styles.meta, { color: palette.muted }]}>Optional · stored only on this device</Text>
         </View>
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Field label="Hourly rate · ₸" value={draft.hourlyRate} onChange={(v) => setDraft((d) => ({ ...d, hourlyRate: v }))} palette={palette} />
-          <Field label="Full monthly salary · ₸" value={draft.monthlySalary} onChange={(v) => setDraft((d) => ({ ...d, monthlySalary: v }))} palette={palette} />
-          <Field label="Transport allowance · ₸" value={draft.monthlyTransport} onChange={(v) => setDraft((d) => ({ ...d, monthlyTransport: v }))} palette={palette} />
+        <Pressable onPress={dismiss} style={[styles.close, { backgroundColor: palette.surface }]}><Text style={[styles.closeText, { color: palette.text }]}>×</Text></Pressable>
+      </View>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <Field label="Hourly rate · ₸" value={draft.hourlyRate} onChange={(v) => setDraft((d) => ({ ...d, hourlyRate: v }))} palette={palette} />
+        <Field label="Full monthly salary · ₸" value={draft.monthlySalary} onChange={(v) => setDraft((d) => ({ ...d, monthlySalary: v }))} palette={palette} />
+        <Field label="Transport allowance · ₸" value={draft.monthlyTransport} onChange={(v) => setDraft((d) => ({ ...d, monthlyTransport: v }))} palette={palette} />
 
-          {roster && <>
-            <Text style={[styles.section, { color: palette.text }]}>Current month overrides</Text>
-            <Field label="Paid hours override · optional" value={draft.paidHours} onChange={(v) => setDraft((d) => ({ ...d, paidHours: v }))} palette={palette} />
-            {deadheadSectors > 0 && <Field label="Deadhead paid hours" value={draft.deadheadHours} onChange={(v) => setDraft((d) => ({ ...d, deadheadHours: v }))} palette={palette} />}
-            {vacationDays > 0 && <>
-              <Text style={[styles.meta, { color: palette.muted }]}>{vacationDays} vacation day{vacationDays === 1 ? '' : 's'} this month. Vacation pay is an average-earnings figure the roster cannot derive — copy it from the payslip.</Text>
-              <Field label="Vacation pay · ₸" value={draft.vacationAmount} onChange={(v) => setDraft((d) => ({ ...d, vacationAmount: v }))} palette={palette} />
-            </>}
-            <Text style={[styles.meta, { color: palette.muted }]}>The roster does not mark public holidays. Enter these only if the payslip shows them.</Text>
-            <Field label="Hours flown on a public holiday" value={draft.holidayHours} onChange={(v) => setDraft((d) => ({ ...d, holidayHours: v }))} palette={palette} />
-            <Field label="Hours flown on an official day off" value={draft.officialDayOffHours} onChange={(v) => setDraft((d) => ({ ...d, officialDayOffHours: v }))} palette={palette} />
-            {sickDays > 0 && <>
-              <Text style={[styles.meta, { color: palette.muted }]}>For sick leave, Kazakhstan average-pay inputs can be entered when the 12-month history is available.</Text>
-              <Field label="Included earnings · preceding 12 months" value={draft.sickEarnings12m} onChange={(v) => setDraft((d) => ({ ...d, sickEarnings12m: v }))} palette={palette} />
-              <Field label="Worked hours · same 12 months" value={draft.sickWorkedHours12m} onChange={(v) => setDraft((d) => ({ ...d, sickWorkedHours12m: v }))} palette={palette} />
-              <Field label="Scheduled hours missed" value={draft.sickMissedHours} onChange={(v) => setDraft((d) => ({ ...d, sickMissedHours: v }))} palette={palette} />
-            </>}
+        {roster && <>
+          <Text style={[styles.section, { color: palette.text }]}>Current month overrides</Text>
+          <Field label="Paid hours override · optional" value={draft.paidHours} onChange={(v) => setDraft((d) => ({ ...d, paidHours: v }))} palette={palette} />
+          {deadheadSectors > 0 && <Field label="Deadhead paid hours" value={draft.deadheadHours} onChange={(v) => setDraft((d) => ({ ...d, deadheadHours: v }))} palette={palette} />}
+          {vacationDays > 0 && <>
+            <Text style={[styles.meta, { color: palette.muted }]}>{vacationDays} vacation day{vacationDays === 1 ? '' : 's'} this month. Vacation pay is an average-earnings figure the roster cannot derive — copy it from the payslip.</Text>
+            <Field label="Vacation pay · ₸" value={draft.vacationAmount} onChange={(v) => setDraft((d) => ({ ...d, vacationAmount: v }))} palette={palette} />
           </>}
-          {error && <Text style={[styles.error, { color: palette.rose }]}>{error}</Text>}
-        </ScrollView>
-        <Pressable onPress={save} style={[styles.save, { backgroundColor: palette.accent }]}><Text style={styles.saveText}>Save settings</Text></Pressable>
-      </SwipeSurface>
-    </View>
-  </Modal>;
+          <Text style={[styles.meta, { color: palette.muted }]}>The roster does not mark public holidays. Enter these only if the payslip shows them.</Text>
+          <Field label="Hours flown on a public holiday" value={draft.holidayHours} onChange={(v) => setDraft((d) => ({ ...d, holidayHours: v }))} palette={palette} />
+          <Field label="Hours flown on an official day off" value={draft.officialDayOffHours} onChange={(v) => setDraft((d) => ({ ...d, officialDayOffHours: v }))} palette={palette} />
+          {sickDays > 0 && <>
+            <Text style={[styles.meta, { color: palette.muted }]}>For sick leave, Kazakhstan average-pay inputs can be entered when the 12-month history is available.</Text>
+            <Field label="Included earnings · preceding 12 months" value={draft.sickEarnings12m} onChange={(v) => setDraft((d) => ({ ...d, sickEarnings12m: v }))} palette={palette} />
+            <Field label="Worked hours · same 12 months" value={draft.sickWorkedHours12m} onChange={(v) => setDraft((d) => ({ ...d, sickWorkedHours12m: v }))} palette={palette} />
+            <Field label="Scheduled hours missed" value={draft.sickMissedHours} onChange={(v) => setDraft((d) => ({ ...d, sickMissedHours: v }))} palette={palette} />
+          </>}
+        </>}
+        {error && <Text style={[styles.error, { color: palette.rose }]}>{error}</Text>}
+      </ScrollView>
+      <Pressable onPress={() => save(dismiss)} style={[styles.save, { backgroundColor: palette.accent }]}><Text style={styles.saveText}>Save settings</Text></Pressable>
+    </>}
+  </IOSSheet>;
 }
 
 function Field({ label, value, onChange, palette }: { label: string; value: string; onChange: (value: string) => void; palette: Palette }) {
@@ -122,15 +124,22 @@ function numberFrom(value: string): number { return Number(value.replace(',', '.
 function optionalNumberFrom(value: string): number | undefined { if (!value.trim()) return undefined; const n = numberFrom(value); return Number.isFinite(n) ? n : undefined; }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.48)', justifyContent: 'flex-end' },
-  sheet: { height: '86%', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, paddingHorizontal: 18, paddingTop: 9, paddingBottom: 10 },
-  handle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 10 },
+  sheet: {
+    height: '88%',
+    maxWidth: 620,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 18,
+    paddingBottom: 10,
+    overflow: 'hidden',
+  },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }, grow: { flex: 1 },
-  title: { fontSize: 25, fontWeight: '700' }, meta: { fontSize: 12, lineHeight: 17 },
+  title: { fontSize: 25, fontWeight: '700', letterSpacing: -0.4 }, meta: { fontSize: 12, lineHeight: 17 },
   close: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' }, closeText: { fontSize: 27 },
   scroll: { flex: 1 }, content: { paddingBottom: 22 }, section: { fontSize: 16, fontWeight: '700', marginTop: 12, marginBottom: 8 },
   field: { marginBottom: 10 }, label: { fontSize: 11, fontWeight: '600', marginBottom: 5 },
-  input: { height: 46, borderWidth: 1, borderRadius: 14, paddingHorizontal: 13, fontSize: 16 },
+  input: { height: 46, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, paddingHorizontal: 13, fontSize: 16 },
   error: { fontSize: 12, fontWeight: '600', marginTop: 8 },
   save: { height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 8 }, saveText: { color: '#fff', fontWeight: '700' },
 });

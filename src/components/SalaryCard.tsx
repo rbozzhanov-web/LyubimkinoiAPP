@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
 import { calculateRosterPay, formatKzt, payReadiness, type PayCalculation, type PayMonthOverrides, type PayProfile } from '@/src/domain/pay';
 import { CREW_PAY_NORM_STATED_TO } from '@/src/domain/crewPayNorm';
@@ -9,12 +9,13 @@ import { calculatePerDiemMonth, formatUsd } from '@/src/domain/perDiem';
 import { detectStationStays, formatStayDuration } from '@/src/domain/layovers';
 import { loadPayMonth, loadPayProfile } from '@/src/storage/payStorage';
 import { loadStoredRosters } from '@/src/storage/rosterStorage';
-import { SwipeSurface } from './SwipeSurface';
+import { IOSSheet } from './IOSOverlay';
 
 type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua', string>;
 
 export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster; palette: Palette }) {
   const monthKey = roster.period.start.slice(0, 7);
+  const monthLabel = formatMonthLabel(monthKey);
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState<Partial<PayProfile>>();
   const [month, setMonth] = useState<PayMonthOverrides>();
@@ -52,7 +53,13 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
   const paidLayovers = perDiem?.items.filter((item) => item.eligible) ?? [];
 
   return <>
-    <Pressable onPress={() => setOpen(true)} style={[styles.card, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]} accessibilityRole="button" accessibilityLabel="Open money details">
+    <Pressable onPress={() => setOpen(true)} style={[styles.card, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]} accessibilityRole="button" accessibilityLabel={`Open money details for ${monthLabel}`}>
+      <View style={styles.periodRow}>
+        <Text style={[styles.label, { color: palette.muted }]}>PAY PERIOD</Text>
+        <Text style={[styles.periodMonth, { color: palette.text }]}>{monthLabel}</Text>
+      </View>
+      <View style={[styles.divider, { backgroundColor: palette.line }]} />
+
       <View style={styles.headerRow}>
         <View style={styles.grow}>
           <Text style={[styles.label, { color: palette.muted }]}>PER DIEM</Text>
@@ -85,75 +92,77 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
         : <Text style={[styles.meta, { color: palette.muted }]}>No layover this month met its minimum ground time.</Text>}
     </View>}
 
-    <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
-      <View style={styles.backdrop}>
-        <SwipeSurface style={[styles.sheet, { backgroundColor: palette.background, borderColor: palette.line }]} onSwipeDown={() => setOpen(false)}>
-          <View style={[styles.handle, { backgroundColor: palette.line }]} />
-          <View style={styles.sheetHeader}>
-            <View style={styles.grow}>
-              <Text style={[styles.sheetTitle, { color: palette.text }]}>Money</Text>
-              <Text style={[styles.meta, { color: palette.muted }]}>{monthKey}</Text>
-            </View>
-            <Pressable onPress={() => setOpen(false)} style={[styles.close, { backgroundColor: palette.surface }]}><Text style={[styles.closeText, { color: palette.text }]}>×</Text></Pressable>
+    <IOSSheet
+      visible={open}
+      onClose={() => setOpen(false)}
+      handleColor={palette.line}
+      style={[styles.sheet, { backgroundColor: palette.background, borderColor: palette.line }]}
+    >
+      {(dismiss) => <>
+        <View style={styles.sheetHeader}>
+          <View style={styles.grow}>
+            <Text style={[styles.sheetTitle, { color: palette.text }]}>Money</Text>
+            <Text style={[styles.meta, { color: palette.muted }]}>{monthLabel}</Text>
           </View>
+          <Pressable onPress={dismiss} style={[styles.close, { backgroundColor: palette.surface }]}><Text style={[styles.closeText, { color: palette.text }]}>×</Text></Pressable>
+        </View>
 
-          <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-            <Text style={[styles.section, { color: palette.text }]}>Qualifying layovers</Text>
-            {perDiem ? <>
-              <View style={[styles.summary, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
-                <Text style={[styles.label, { color: palette.muted }]}>MONTH TOTAL</Text>
-                <Text style={[styles.total, { color: palette.text }]}>{perDiemHeadline(perDiem, fx)}</Text>
-                <Text style={[styles.meta, { color: palette.muted }]}>{paidLayovers.length} paid layover{paidLayovers.length === 1 ? '' : 's'}</Text>
-                {fx && <Text style={[styles.hint, { color: palette.muted }]}>NBRK USD/KZT {fx.usdKzt.toFixed(2)} · {fx.source === 'official' ? 'official' : 'cached official'} rate</Text>}
-              </View>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+          <Text style={[styles.section, { color: palette.text }]}>Qualifying layovers</Text>
+          {perDiem ? <>
+            <View style={[styles.summary, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+              <Text style={[styles.label, { color: palette.muted }]}>MONTH TOTAL</Text>
+              <Text style={[styles.total, { color: palette.text }]}>{perDiemHeadline(perDiem, fx)}</Text>
+              <Text style={[styles.meta, { color: palette.muted }]}>{paidLayovers.length} paid layover{paidLayovers.length === 1 ? '' : 's'}</Text>
+              {fx && <Text style={[styles.hint, { color: palette.muted }]}>NBRK USD/KZT {fx.usdKzt.toFixed(2)} · {fx.source === 'official' ? 'official' : 'cached official'} rate</Text>}
+            </View>
 
-              {paidLayovers.length ? paidLayovers.map((item) => <View key={`${item.stay.arrivalLocal}-${item.stay.station}`} style={[styles.layover, { borderColor: palette.line }]}>
-                <View style={styles.headerRow}>
-                  <View style={styles.grow}>
-                    <Text style={[styles.station, { color: palette.text }]}>{item.stay.station}</Text>
-                    <Text style={[styles.meta, { color: palette.muted }]}>{shortDate(item.stay.arrivalLocal)} · {item.units} day{item.units === 1 ? '' : 's'} · {formatStayDuration(item.stay.durationMinutes)}</Text>
-                    <Text style={[styles.hint, { color: palette.muted }]}>{regionLabel(item.region)}</Text>
-                  </View>
-                  <Text style={[styles.amount, { color: palette.accent }]}>{perDiemItemAmount(item)}</Text>
+            {paidLayovers.length ? paidLayovers.map((item) => <View key={`${item.stay.arrivalLocal}-${item.stay.station}`} style={[styles.layover, { borderColor: palette.line }]}>
+              <View style={styles.headerRow}>
+                <View style={styles.grow}>
+                  <Text style={[styles.station, { color: palette.text }]}>{item.stay.station}</Text>
+                  <Text style={[styles.meta, { color: palette.muted }]}>{shortDate(item.stay.arrivalLocal)} · {item.units} day{item.units === 1 ? '' : 's'} · {formatStayDuration(item.stay.durationMinutes)}</Text>
+                  <Text style={[styles.hint, { color: palette.muted }]}>{regionLabel(item.region)}</Text>
                 </View>
-              </View>) : <Text style={[styles.meta, { color: palette.muted }]}>No qualifying layovers this month.</Text>}
-            </> : <Text style={[styles.meta, { color: palette.muted }]}>Waiting for annual MRP.</Text>}
+                <Text style={[styles.amount, { color: palette.accent }]}>{perDiemItemAmount(item)}</Text>
+              </View>
+            </View>) : <Text style={[styles.meta, { color: palette.muted }]}>No qualifying layovers this month.</Text>}
+          </> : <Text style={[styles.meta, { color: palette.muted }]}>Waiting for annual MRP.</Text>}
 
-            <View style={[styles.sectionDivider, { backgroundColor: palette.line }]} />
-            <Text style={[styles.section, { color: palette.text }]}>Salary estimate</Text>
-            {calculation ? <>
-              <View style={[styles.summary, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
-                <Text style={[styles.label, { color: palette.muted }]}>TO RECEIVE</Text>
-                <Text style={[styles.total, { color: palette.text }]}>{formatKzt(calculation.net)}</Text>
-                <Text style={[styles.meta, { color: palette.muted }]}>Gross {formatKzt(calculation.gross)} · CrewPay {calculation.paidHours.toFixed(2)} h</Text>
-              </View>
-              <View style={styles.breakdown}>
-                <Line label="Salary" value={calculation.salaryLine.amount} palette={palette} />
-                <Line label="Transport" value={calculation.transportLine.amount} palette={palette} />
-                <Line label="Paid hours" value={calculation.hourBaseLine.amount} palette={palette} />
-                {calculation.hourSurchargeLines.filter((line) => line.amount > 0).map((line) => <Line key={line.label} label={line.label} value={line.amount} palette={palette} />)}
-                <Line label="Night" value={calculation.nightLine.amount} palette={palette} />
-                {calculation.holidayLine.amount > 0 && <Line label="Public holiday hours" value={calculation.holidayLine.amount} palette={palette} />}
-                {calculation.officialDayOffLine.amount > 0 && <Line label="Official day off hours" value={calculation.officialDayOffLine.amount} palette={palette} />}
-                <Line label="Sector supplements" value={calculation.sectorLines.reduce((sum, line) => sum + line.amount, 0)} palette={palette} />
-                {calculation.deadheadLine.amount > 0 && <Line label="Deadhead" value={calculation.deadheadLine.amount} palette={palette} />}
-                {calculation.sickLine.amount > 0 && <Line label={calculation.sickSource === 'known-payslip' ? 'Sick leave · known payslip' : 'Sick leave'} value={calculation.sickLine.amount} palette={palette} />}
-                {calculation.vacationLine.amount > 0 && <Line label={`Vacation pay · ${calculation.vacationDays} day${calculation.vacationDays === 1 ? '' : 's'}`} value={calculation.vacationLine.amount} palette={palette} />}
-                <Line label="Gross" value={calculation.gross} strong palette={palette} />
-                <Line label="OSMS" value={-calculation.osms} palette={palette} />
-                <Line label="OPV" value={-calculation.opv} palette={palette} />
-                <Line label="IPN" value={-calculation.ipn} palette={palette} />
-                <Line label="Net" value={calculation.net} strong palette={palette} />
-              </View>
-              <Text style={[styles.hint, { color: palette.muted }]}>CrewPay Norm {calculation.crewPayNormVersion}{calculation.crewPayNormAfterStatedPeriod ? ` · latest published after ${CREW_PAY_NORM_STATED_TO}` : ''}.</Text>
-            </> : <View style={[styles.summary, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
-              <Text style={[styles.meta, { color: palette.muted }]}>Salary is optional for other users. Configure it in More → Salary settings.</Text>
-              {readiness.missing.length > 0 && <Text style={[styles.hint, { color: palette.muted }]}>Missing: {readiness.missing.join(', ')}.</Text>}
-            </View>}
-          </ScrollView>
-        </SwipeSurface>
-      </View>
-    </Modal>
+          <View style={[styles.sectionDivider, { backgroundColor: palette.line }]} />
+          <Text style={[styles.section, { color: palette.text }]}>Salary estimate</Text>
+          {calculation ? <>
+            <View style={[styles.summary, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+              <Text style={[styles.label, { color: palette.muted }]}>TO RECEIVE</Text>
+              <Text style={[styles.total, { color: palette.text }]}>{formatKzt(calculation.net)}</Text>
+              <Text style={[styles.meta, { color: palette.muted }]}>Gross {formatKzt(calculation.gross)} · CrewPay {calculation.paidHours.toFixed(2)} h</Text>
+            </View>
+            <View style={styles.breakdown}>
+              <Line label="Salary" value={calculation.salaryLine.amount} palette={palette} />
+              <Line label="Transport" value={calculation.transportLine.amount} palette={palette} />
+              <Line label="Paid hours" value={calculation.hourBaseLine.amount} palette={palette} />
+              {calculation.hourSurchargeLines.filter((line) => line.amount > 0).map((line) => <Line key={line.label} label={line.label} value={line.amount} palette={palette} />)}
+              <Line label="Night" value={calculation.nightLine.amount} palette={palette} />
+              {calculation.holidayLine.amount > 0 && <Line label="Public holiday hours" value={calculation.holidayLine.amount} palette={palette} />}
+              {calculation.officialDayOffLine.amount > 0 && <Line label="Official day off hours" value={calculation.officialDayOffLine.amount} palette={palette} />}
+              <Line label="Sector supplements" value={calculation.sectorLines.reduce((sum, line) => sum + line.amount, 0)} palette={palette} />
+              {calculation.deadheadLine.amount > 0 && <Line label="Deadhead" value={calculation.deadheadLine.amount} palette={palette} />}
+              {calculation.sickLine.amount > 0 && <Line label={calculation.sickSource === 'known-payslip' ? 'Sick leave · known payslip' : 'Sick leave'} value={calculation.sickLine.amount} palette={palette} />}
+              {calculation.vacationLine.amount > 0 && <Line label={`Vacation pay · ${calculation.vacationDays} day${calculation.vacationDays === 1 ? '' : 's'}`} value={calculation.vacationLine.amount} palette={palette} />}
+              <Line label="Gross" value={calculation.gross} strong palette={palette} />
+              <Line label="OSMS" value={-calculation.osms} palette={palette} />
+              <Line label="OPV" value={-calculation.opv} palette={palette} />
+              <Line label="IPN" value={-calculation.ipn} palette={palette} />
+              <Line label="Net" value={calculation.net} strong palette={palette} />
+            </View>
+            <Text style={[styles.hint, { color: palette.muted }]}>CrewPay Norm {calculation.crewPayNormVersion}{calculation.crewPayNormAfterStatedPeriod ? ` · latest published after ${CREW_PAY_NORM_STATED_TO}` : ''}.</Text>
+          </> : <View style={[styles.summary, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+            <Text style={[styles.meta, { color: palette.muted }]}>Salary is optional for other users. Configure it in More → Salary settings.</Text>
+            {readiness.missing.length > 0 && <Text style={[styles.hint, { color: palette.muted }]}>Missing: {readiness.missing.join(', ')}.</Text>}
+          </View>}
+        </ScrollView>
+      </>}
+    </IOSSheet>
   </>;
 }
 
@@ -172,6 +181,11 @@ function regionLabel(region: ReturnType<typeof calculatePerDiemMonth>['items'][n
   if (region === 'EU_UK') return 'EU / UK · $60 / UTC day';
   return 'Other foreign · $50 / UTC day';
 }
+function formatMonthLabel(value: string): string {
+  const [year, month] = value.split('-').map(Number);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) return value;
+  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, 1)));
+}
 function shortDate(value: string): string {
   const [date] = value.split('T');
   const [, month, day] = date.split('-');
@@ -183,6 +197,8 @@ function Line({ label, value, strong, palette }: { label: string; value: number;
 
 const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: 20, padding: 15 },
+  periodRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  periodMonth: { fontSize: 13, fontWeight: '700' },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   grow: { flex: 1 },
   label: { fontSize: 10, fontWeight: '700', letterSpacing: 1.1 },
@@ -195,17 +211,15 @@ const styles = StyleSheet.create({
   inline: { flex: 1, minHeight: 0, gap: 2 }, inlineList: { flex: 1 },
   inlineRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
   inlineStation: { fontSize: 16, fontWeight: '700' }, inlineAmount: { fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.48)', justifyContent: 'flex-end' },
-  sheet: { height: '88%', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, paddingHorizontal: 18, paddingTop: 9, paddingBottom: 10 },
-  handle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 10 },
+  sheet: { height: '90%', maxWidth: 620, borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 18, paddingBottom: 10, overflow: 'hidden' },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', paddingBottom: 8 },
-  sheetTitle: { fontSize: 25, fontWeight: '700' },
+  sheetTitle: { fontSize: 25, fontWeight: '700', letterSpacing: -0.4 },
   close: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   closeText: { fontSize: 27 },
   scroll: { flex: 1 }, scrollContent: { paddingBottom: 24 },
   section: { fontSize: 17, fontWeight: '700', marginTop: 12, marginBottom: 8 },
   sectionDivider: { height: StyleSheet.hairlineWidth, marginTop: 18, marginBottom: 2 },
-  summary: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 8 },
+  summary: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 18, padding: 14, marginBottom: 8 },
   total: { fontSize: 24, fontWeight: '700', marginTop: 5, marginBottom: 2 },
   layover: { borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: 12 },
   station: { fontSize: 18, fontWeight: '700' },
