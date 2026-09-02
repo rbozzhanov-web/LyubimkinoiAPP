@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, type ReactNode } from 'react';
-import { Animated, Easing, PanResponder, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Easing, PanResponder, Platform, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { swipeAxis, type SwipeAxis } from '@/src/domain/gesture';
 
 type Props = {
@@ -14,6 +14,9 @@ type Props = {
 
 const RETURN_SPRING = { stiffness: 300, damping: 30, mass: 0.82, useNativeDriver: true } as const;
 const PAGE_EASING = Easing.bezier(0.22, 1, 0.36, 1);
+const WEB_COMPOSITE = Platform.OS === 'web'
+  ? ({ willChange: 'transform', backfaceVisibility: 'hidden' } as any)
+  : undefined;
 
 export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwipeDown, threshold = 52, dominance = 1.25 }: Props) {
   const translation = useRef(new Animated.ValueXY()).current;
@@ -128,7 +131,7 @@ export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwi
 
   return <Animated.View
     onLayout={onLayout}
-    style={[style, { transform: translation.getTranslateTransform() }]}
+    style={[style, WEB_COMPOSITE, { transform: translation.getTranslateTransform() }]}
     {...responder.panHandlers}
   >
     {children}
