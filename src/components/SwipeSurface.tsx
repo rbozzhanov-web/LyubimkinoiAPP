@@ -12,10 +12,11 @@ type Props = {
   dominance?: number;
 };
 
-const RETURN_SPRING = { stiffness: 300, damping: 30, mass: 0.82, useNativeDriver: true } as const;
-const PAGE_EASING = Easing.bezier(0.22, 1, 0.36, 1);
+const RETURN_SPRING = { stiffness: 260, damping: 28, mass: 0.9, useNativeDriver: true } as const;
+const ENTRY_SPRING = { stiffness: 245, damping: 29, mass: 0.88, useNativeDriver: true } as const;
+const PAGE_EASING = Easing.bezier(0.2, 0.72, 0, 1);
 const WEB_COMPOSITE = Platform.OS === 'web'
-  ? ({ willChange: 'transform', backfaceVisibility: 'hidden' } as any)
+  ? ({ willChange: 'transform', backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' } as any)
   : undefined;
 
 export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwipeDown, threshold = 52, dominance = 1.25 }: Props) {
@@ -30,7 +31,7 @@ export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwi
   }, [translation]);
 
   const settle = useCallback(() => {
-    Animated.spring(translation, { toValue: { x: 0, y: 0 }, ...RETURN_SPRING }).start(() => {
+    Animated.spring(translation, { toValue: { x: 0, y: 0 }, ...RETURN_SPRING, isInteraction: false }).start(() => {
       transitioning.current = false;
     });
   }, [translation]);
@@ -41,21 +42,23 @@ export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwi
     const width = Math.max(260, size.current.width);
 
     Animated.timing(translation.x, {
-      toValue: direction * width,
-      duration: 210,
+      toValue: direction * (width + 8),
+      duration: 178,
       easing: PAGE_EASING,
       useNativeDriver: true,
+      isInteraction: false,
     }).start(({ finished }) => {
       if (!finished) { settle(); return; }
 
       callback();
       translation.setValue({ x: -direction * width, y: 0 });
-      Animated.timing(translation.x, {
-        toValue: 0,
-        duration: 240,
-        easing: PAGE_EASING,
-        useNativeDriver: true,
-      }).start(() => reset());
+      requestAnimationFrame(() => {
+        Animated.spring(translation.x, {
+          toValue: 0,
+          ...ENTRY_SPRING,
+          isInteraction: false,
+        }).start(() => reset());
+      });
     });
   }, [reset, settle, translation]);
 
@@ -65,9 +68,10 @@ export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwi
     const height = Math.max(360, size.current.height);
     Animated.timing(translation.y, {
       toValue: height + 56,
-      duration: 220,
+      duration: 210,
       easing: Easing.bezier(0.32, 0.72, 0, 1),
       useNativeDriver: true,
+      isInteraction: false,
     }).start(({ finished }) => {
       if (finished) callback();
       reset();
@@ -90,7 +94,8 @@ export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwi
     onPanResponderMove: (_, gesture) => {
       if (activeAxis.current === 'horizontal') {
         const unavailable = (gesture.dx < 0 && !onSwipeLeft) || (gesture.dx > 0 && !onSwipeRight);
-        translation.setValue({ x: unavailable ? gesture.dx * 0.18 : gesture.dx, y: 0 });
+        const resisted = unavailable ? gesture.dx * 0.16 : gesture.dx;
+        translation.setValue({ x: resisted, y: 0 });
       } else if (activeAxis.current === 'down') {
         const raw = Math.max(0, gesture.dy);
         const y = raw <= 300 ? raw : 300 + (raw - 300) * 0.28;
@@ -102,7 +107,7 @@ export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwi
       const absY = Math.abs(gesture.dy);
       const horizontal = activeAxis.current === 'horizontal' && absX > absY * dominance;
       const vertical = activeAxis.current === 'down' && absY > absX * dominance;
-      const fastHorizontal = absX >= 18 && Math.abs(gesture.vx) >= 0.52;
+      const fastHorizontal = absX >= 18 && Math.abs(gesture.vx) >= 0.5;
       const fastDown = gesture.dy >= 18 && gesture.vy >= 0.68;
 
       activeAxis.current = undefined;
