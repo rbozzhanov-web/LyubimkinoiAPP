@@ -168,9 +168,9 @@ function perDiemItemAmount(item: ReturnType<typeof calculatePerDiemMonth>['items
   return item.region === 'KZ' ? formatKzt(item.kztAmount) : formatUsd(item.usdAmount);
 }
 function regionLabel(region: ReturnType<typeof calculatePerDiemMonth>['items'][number]['region']): string {
-  if (region === 'KZ') return 'Astana · 3 MRP';
-  if (region === 'EU_UK') return 'EU / UK · $60';
-  return 'Other foreign · $50';
+  if (region === 'KZ') return 'Kazakhstan · 3 MRP / UTC day';
+  if (region === 'EU_UK') return 'EU / UK · $60 / UTC day';
+  return 'Other foreign · $50 / UTC day';
 }
 function shortDate(value: string): string {
   const [date] = value.split('T');
