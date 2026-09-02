@@ -24,6 +24,8 @@ export type Sector = {
 
 export type Duty = {
   id: string;
+  /** ISO local-station calendar date, YYYY-MM-DD. */
+  date: string;
   dateLabel: string;
   reportTime: string;
   releaseTime: string;
