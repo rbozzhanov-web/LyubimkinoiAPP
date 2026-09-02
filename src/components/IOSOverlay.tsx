@@ -4,6 +4,7 @@ import {
   Easing,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -32,6 +33,15 @@ type DialogProps = {
 };
 
 const SPRING = { stiffness: 360, damping: 34, mass: 0.82, useNativeDriver: true } as const;
+const WEB_GLASS = Platform.OS === 'web'
+  ? ({ backdropFilter: 'blur(24px) saturate(1.22)', WebkitBackdropFilter: 'blur(24px) saturate(1.22)' } as any)
+  : undefined;
+const WEB_TRANSFORM_LAYER = Platform.OS === 'web'
+  ? ({ willChange: 'transform', backfaceVisibility: 'hidden' } as any)
+  : undefined;
+const WEB_OPACITY_LAYER = Platform.OS === 'web'
+  ? ({ willChange: 'opacity' } as any)
+  : undefined;
 
 export function IOSSheet({ visible, onClose, children, style, handleColor, backdropOpacity = 0.46 }: SheetProps) {
   const [mounted, setMounted] = useState(visible);
@@ -115,12 +125,12 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
 
   return <Modal visible transparent animationType="none" presentationStyle="overFullScreen" onRequestClose={dismiss}>
     <View style={styles.fill}>
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, { opacity: dimOpacity }]} />
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, WEB_OPACITY_LAYER, { opacity: dimOpacity }]} />
       <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close overlay" />
       <Animated.View
         accessibilityViewIsModal
         onLayout={(event) => { sheetHeight.current = event.nativeEvent.layout.height; }}
-        style={[styles.sheetBase, style, { transform: [{ translateY }] }]}
+        style={[styles.sheetBase, WEB_GLASS, WEB_TRANSFORM_LAYER, style, { transform: [{ translateY }] }]}
       >
         <View style={styles.grabberTouch} {...responder.panHandlers}>
           <View style={[styles.grabber, { backgroundColor: handleColor }]} />
@@ -177,9 +187,9 @@ export function IOSDialog({ visible, onClose, children, style, backdropOpacity =
 
   return <Modal visible transparent animationType="none" presentationStyle="overFullScreen" onRequestClose={dismiss}>
     <View style={[styles.fill, styles.dialogHost]}>
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, { opacity: dimOpacity }]} />
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, WEB_OPACITY_LAYER, { opacity: dimOpacity }]} />
       {dismissOnBackdrop && <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close dialog" />}
-      <Animated.View accessibilityViewIsModal style={[style, { opacity: presentation, transform: [{ translateY }, { scale }] }]}>
+      <Animated.View accessibilityViewIsModal style={[WEB_GLASS, WEB_TRANSFORM_LAYER, style, { opacity: presentation, transform: [{ translateY }, { scale }] }]}>
         {content}
       </Animated.View>
     </View>
