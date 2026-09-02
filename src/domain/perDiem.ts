@@ -24,14 +24,10 @@ export const PER_DIEM_RULES: Record<PerDiemRegion, PerDiemRule> = {
   EU_UK: { region: 'EU_UK', minimumStationMinutes: 2 * 60, usdRate: 60 },
 };
 
-// Kazakhstan stations present in the current Air Astana route/pay tables. ALA is the home base and
-// never receives Kazakhstan per diem; the other KZ stations use the >6h-per-UTC-day rule.
 const KZ_STATIONS = new Set([
   'AKX', 'ALA', 'BSZ', 'CIT', 'DMB', 'GUW', 'KGF', 'KSN', 'KZO', 'NQZ', 'PLX', 'PWQ', 'SCO', 'UKK', 'URA',
 ]);
 
-// EU/UK stations present in the current published CrewPay route set. Everything foreign that is
-// not in this bucket is $50 — no geographical guesswork or unclassified state is needed.
 const EU_UK_STATIONS = new Set(['AMS', 'FRA', 'HER', 'LHR']);
 
 export function classifyPerDiemStation(station: string): PerDiemRegion {
@@ -54,9 +50,9 @@ export function getKazakhstanPerDiemKzt(mrpKzt: number): number {
 }
 
 /**
- * Kazakhstan rule: count UTC calendar days separately. A UTC day qualifies only if presence at
- * the Kazakhstan station inside that UTC day is strictly more than six hours. Kazakhstan local
- * civil time is UTC+5, so the stay timestamps are shifted by five hours before UTC-day slicing.
+ * Kazakhstan rule used for the Astana relay: inspect UTC calendar-day slices and qualify the
+ * relay when at least one slice contains strictly more than six hours at station. A relay is
+ * still paid once only, even when it spans several UTC dates.
  */
 export function kazakhstanQualifyingUtcDays(stay: StationStay): number {
   const start = kzLocalToUtcMs(stay.arrivalLocal);
@@ -66,22 +62,23 @@ export function kazakhstanQualifyingUtcDays(stay: StationStay): number {
   const dayMs = 24 * 60 * 60 * 1000;
   const thresholdMs = PER_DIEM_RULES.KZ.minimumStationMinutes * 60 * 1000;
   let cursor = utcDayStart(start);
-  let units = 0;
 
   while (cursor < end) {
     const next = cursor + dayMs;
     const overlap = Math.max(0, Math.min(end, next) - Math.max(start, cursor));
-    if (overlap > thresholdMs) units += 1;
+    if (overlap > thresholdMs) return 1;
     cursor = next;
   }
-  return units;
+  return 0;
 }
 
 export function calculatePerDiemStay(stay: StationStay, mrpKzt: number, usdKzt?: number): PerDiemStayResult {
   const region = classifyPerDiemStation(stay.station);
+  const station = stay.station.trim().toUpperCase();
 
   if (region === 'KZ') {
-    if (stay.station.trim().toUpperCase() === 'ALA') {
+    // Current confirmed company rule for this app: within Kazakhstan only Astana is paid here.
+    if (station !== 'NQZ') {
       return { stay, region, eligible: false, units: 0, usdAmount: 0, kztAmount: 0 };
     }
     const units = kazakhstanQualifyingUtcDays(stay);
