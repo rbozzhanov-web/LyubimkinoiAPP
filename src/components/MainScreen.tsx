@@ -169,7 +169,7 @@ export default function MainScreen() {
         </Pressable>
       </View>
 
-      <SwipeSurface style={styles.viewport} onSwipeLeft={() => changeTab(1)} onSwipeRight={() => changeTab(-1)}>
+      <SwipeSurface style={styles.viewport} onSwipeLeft={tab === 'More' ? undefined : () => changeTab(1)} onSwipeRight={tab === 'Home' ? undefined : () => changeTab(-1)}>
         {tab === 'Home' && <Home allDuties={allDuties} fallbackRoster={roster} rosters={rosters} palette={palette} onImport={importRoster} importing={importing} />}
         {tab === 'Roster' && <RosterScreen roster={roster} rosters={rosters} duties={duties} selectedSector={selectedSector} palette={palette} importing={importing} error={importError} onImport={importRoster} onSelect={setSelectedFlight} onMonth={changeMonth} />}
         {tab === 'Money' && <MoneyScreen key={`${roster?.period.start ?? 'none'}-${payRevision}`} roster={roster} palette={palette} />}
