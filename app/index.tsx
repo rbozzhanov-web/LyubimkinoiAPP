@@ -44,16 +44,16 @@ export default function IndexScreen() {
   const cumulativeNight = sumReportedNightMinutes(rosters);
 
   const palette = useMemo<Palette>(() => ({
-    background: dark ? '#11110F' : '#F4F1EC',
-    surface: dark ? '#1B1A18' : '#FCFAF7',
-    surfaceStrong: dark ? '#25231F' : '#FFFFFF',
-    text: dark ? '#F7F4EF' : '#171714',
-    muted: dark ? '#AAA49A' : '#747067',
-    line: dark ? '#302E29' : '#E7E1D8',
-    accent: lovedMode ? '#D98B74' : (dark ? '#C7BDAE' : '#2F3934'),
-    accentSoft: lovedMode ? (dark ? '#34221F' : '#F6E3DC') : (dark ? '#222925' : '#E6ECE8'),
-    rose: lovedMode ? '#B96A73' : (dark ? '#C7BDAE' : '#2F3934'),
-    aqua: lovedMode ? '#7CC8D6' : (dark ? '#AAA49A' : '#747067'),
+    background: lovedMode ? (dark ? '#1B1114' : '#FFF0E8') : (dark ? '#11110F' : '#F4F1EC'),
+    surface: lovedMode ? (dark ? '#24171A' : '#FFF7F2') : (dark ? '#1B1A18' : '#FCFAF7'),
+    surfaceStrong: lovedMode ? (dark ? '#2C1B20' : '#FFFFFF') : (dark ? '#25231F' : '#FFFFFF'),
+    text: lovedMode ? (dark ? '#FFF5F2' : '#2B1718') : (dark ? '#F7F4EF' : '#171714'),
+    muted: lovedMode ? (dark ? '#D3A69F' : '#8A5C56') : (dark ? '#AAA49A' : '#747067'),
+    line: lovedMode ? (dark ? '#513037' : '#F3C1B2') : (dark ? '#302E29' : '#E7E1D8'),
+    accent: lovedMode ? '#F06445' : (dark ? '#C7BDAE' : '#2F3934'),
+    accentSoft: lovedMode ? (dark ? '#44231F' : '#FFD8C9') : (dark ? '#222925' : '#E6ECE8'),
+    rose: lovedMode ? '#DE466D' : (dark ? '#C7BDAE' : '#2F3934'),
+    aqua: lovedMode ? '#2EC5D2' : (dark ? '#AAA49A' : '#747067'),
   }), [dark, lovedMode]);
 
   const importRoster = async () => {
@@ -121,7 +121,7 @@ export default function IndexScreen() {
           <Text style={[styles.brand, { color: palette.text }]}>KhaVair</Text>
           <Text style={[styles.kicker, { color: palette.muted }]}>CABIN CREW COMPANION</Text>
         </View>
-        <Pressable onPress={requestLovedMode} style={[styles.modeButton, { backgroundColor: palette.surface }]} accessibilityLabel="Loved One Mode">
+        <Pressable onPress={requestLovedMode} style={[styles.modeButton, { backgroundColor: lovedMode ? palette.accentSoft : palette.surface, borderColor: lovedMode ? palette.rose : 'transparent', borderWidth: lovedMode ? 1 : 0 }]} accessibilityLabel="Loved One Mode">
           <Text style={styles.modeGlyph}>{lovedMode ? '🌹' : '♡'}</Text>
         </Pressable>
       </View>
