@@ -31,7 +31,13 @@ export type Duty = {
   layoverStation?: string;
 };
 
-export type PerDiemRegion = 'KZ' | 'ASIA' | 'EU_UK';
+/**
+ * Per-diem tariff buckets, not geographic continents:
+ * - KZ: Kazakhstan, 3 MRP when the UTC qualification rule is met;
+ * - FOREIGN_50: every foreign station that is not EU/UK;
+ * - EU_UK: European Union and United Kingdom.
+ */
+export type PerDiemRegion = 'KZ' | 'FOREIGN_50' | 'EU_UK';
 export type PerDiemRule = {
   region: PerDiemRegion;
   minimumStationMinutes: number;
