@@ -51,7 +51,7 @@ const APP_SHELL_CSS = `
     -webkit-backdrop-filter: blur(18px) saturate(1.62);
     backdrop-filter: blur(18px) saturate(1.62);
     box-shadow: 0 5px 16px rgba(0, 0, 0, .08), inset 0 1px 0 rgba(255, 255, 255, .52);
-    transform: translate3d(calc(var(--khav-tab-index, 0) * 100%), 0, 0) scaleX(.88);
+    transform: translate3d(var(--khav-tab-shift, 0%), 0, 0) scaleX(.88);
     transform-origin: center;
     transition: transform 390ms cubic-bezier(.22, .86, .2, 1), background-color 240ms ease, box-shadow 240ms ease;
     will-change: transform;
@@ -118,7 +118,7 @@ const LIQUID_TAB_BAR = `
       const sync = () => {
         const liveTabs = Array.from(bar.querySelectorAll(':scope > [role="tab"]'));
         const index = Math.max(0, liveTabs.findIndex((tab) => tab.getAttribute('aria-selected') === 'true'));
-        bar.style.setProperty('--khav-tab-index', String(index));
+        bar.style.setProperty('--khav-tab-shift', String(index * 100) + '%');
       };
 
       sync();
