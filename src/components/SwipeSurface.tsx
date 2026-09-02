@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Animated, Easing, PanResponder, StyleSheet, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { useCallback, useMemo, useRef, type ReactNode } from 'react';
+import { Animated, Easing, PanResponder, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { swipeAxis, type SwipeAxis } from '@/src/domain/gesture';
 
 type Props = {
@@ -12,68 +12,68 @@ type Props = {
   dominance?: number;
 };
 
-const SPRING = { stiffness: 330, damping: 31, mass: 0.78, useNativeDriver: true } as const;
+const RETURN_SPRING = { stiffness: 300, damping: 30, mass: 0.82, useNativeDriver: true } as const;
+const PAGE_EASING = Easing.bezier(0.22, 1, 0.36, 1);
 
 export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwipeDown, threshold = 52, dominance = 1.25 }: Props) {
   const translation = useRef(new Animated.ValueXY()).current;
-  const opacity = useRef(new Animated.Value(1)).current;
-  const scale = useRef(new Animated.Value(1)).current;
   const activeAxis = useRef<SwipeAxis | undefined>(undefined);
   const size = useRef({ width: 360, height: 640 });
-  const [dragging, setDragging] = useState(false);
+  const transitioning = useRef(false);
 
-  const resetVisuals = useCallback(() => {
+  const reset = useCallback(() => {
     translation.setValue({ x: 0, y: 0 });
-    opacity.setValue(1);
-    scale.setValue(1);
-  }, [opacity, scale, translation]);
+    transitioning.current = false;
+  }, [translation]);
 
   const settle = useCallback(() => {
-    Animated.parallel([
-      Animated.spring(translation, { toValue: { x: 0, y: 0 }, ...SPRING }),
-      Animated.spring(scale, { toValue: 1, ...SPRING }),
-      Animated.timing(opacity, { toValue: 1, duration: 120, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-    ]).start(() => setDragging(false));
-  }, [opacity, scale, translation]);
+    Animated.spring(translation, { toValue: { x: 0, y: 0 }, ...RETURN_SPRING }).start(() => {
+      transitioning.current = false;
+    });
+  }, [translation]);
 
   const completeHorizontal = useCallback((direction: -1 | 1, callback: () => void) => {
+    if (transitioning.current) return;
+    transitioning.current = true;
     const width = Math.max(260, size.current.width);
-    const exit = direction * Math.min(width * 0.34, 180);
-    Animated.parallel([
-      Animated.timing(translation.x, { toValue: exit, duration: 145, easing: Easing.bezier(0.2, 0.78, 0.2, 1), useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 0.22, duration: 135, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      Animated.timing(scale, { toValue: 0.985, duration: 145, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-    ]).start(({ finished }) => {
+
+    Animated.timing(translation.x, {
+      toValue: direction * width,
+      duration: 210,
+      easing: PAGE_EASING,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
       if (!finished) { settle(); return; }
+
       callback();
-      translation.setValue({ x: -direction * Math.min(width * 0.12, 54), y: 0 });
-      opacity.setValue(0.72);
-      scale.setValue(0.992);
-      Animated.parallel([
-        Animated.spring(translation.x, { toValue: 0, ...SPRING }),
-        Animated.spring(scale, { toValue: 1, ...SPRING }),
-        Animated.timing(opacity, { toValue: 1, duration: 165, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      ]).start(() => {
-        resetVisuals();
-        setDragging(false);
-      });
+      translation.setValue({ x: -direction * width, y: 0 });
+      Animated.timing(translation.x, {
+        toValue: 0,
+        duration: 240,
+        easing: PAGE_EASING,
+        useNativeDriver: true,
+      }).start(() => reset());
     });
-  }, [opacity, resetVisuals, scale, settle, translation]);
+  }, [reset, settle, translation]);
 
   const completeDown = useCallback((callback: () => void) => {
+    if (transitioning.current) return;
+    transitioning.current = true;
     const height = Math.max(360, size.current.height);
-    Animated.parallel([
-      Animated.timing(translation.y, { toValue: height + 56, duration: 220, easing: Easing.bezier(0.32, 0.72, 0, 1), useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 0.82, duration: 180, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-    ]).start(({ finished }) => {
+    Animated.timing(translation.y, {
+      toValue: height + 56,
+      duration: 220,
+      easing: Easing.bezier(0.32, 0.72, 0, 1),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
       if (finished) callback();
-      resetVisuals();
-      setDragging(false);
+      reset();
     });
-  }, [opacity, resetVisuals, translation]);
+  }, [reset, translation]);
 
   const responder = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_, gesture) => {
+      if (transitioning.current) return false;
       const absX = Math.abs(gesture.dx);
       const absY = Math.abs(gesture.dy);
       if (absX < 10 && absY < 10) return false;
@@ -82,24 +82,16 @@ export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwi
     },
     onPanResponderGrant: () => {
       translation.stopAnimation();
-      opacity.stopAnimation();
-      scale.stopAnimation();
-      resetVisuals();
-      setDragging(true);
+      translation.setValue({ x: 0, y: 0 });
     },
     onPanResponderMove: (_, gesture) => {
       if (activeAxis.current === 'horizontal') {
         const unavailable = (gesture.dx < 0 && !onSwipeLeft) || (gesture.dx > 0 && !onSwipeRight);
-        const dx = unavailable ? gesture.dx * 0.22 : gesture.dx;
-        const progress = Math.min(Math.abs(dx) / Math.max(1, size.current.width), 1);
-        translation.setValue({ x: dx, y: 0 });
-        scale.setValue(1 - progress * 0.012);
-        opacity.setValue(1 - progress * 0.08);
+        translation.setValue({ x: unavailable ? gesture.dx * 0.18 : gesture.dx, y: 0 });
       } else if (activeAxis.current === 'down') {
         const raw = Math.max(0, gesture.dy);
         const y = raw <= 300 ? raw : 300 + (raw - 300) * 0.28;
         translation.setValue({ x: 0, y });
-        opacity.setValue(1 - Math.min(y / 900, 0.12));
       }
     },
     onPanResponderRelease: (_, gesture) => {
@@ -126,7 +118,7 @@ export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwi
       settle();
     },
     onPanResponderTerminationRequest: () => true,
-  }), [completeDown, completeHorizontal, dominance, onSwipeDown, onSwipeLeft, onSwipeRight, opacity, resetVisuals, scale, settle, threshold, translation]);
+  }), [completeDown, completeHorizontal, dominance, onSwipeDown, onSwipeLeft, onSwipeRight, settle, threshold, translation]);
 
   const onLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -136,19 +128,9 @@ export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwi
 
   return <Animated.View
     onLayout={onLayout}
-    style={[style, dragging && styles.elevated, { opacity, transform: [...translation.getTranslateTransform(), { scale }] }]}
+    style={[style, { transform: translation.getTranslateTransform() }]}
     {...responder.panHandlers}
   >
     {children}
   </Animated.View>;
 }
-
-const styles = StyleSheet.create({
-  elevated: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.14,
-    shadowRadius: 24,
-    elevation: 12,
-  },
-});
