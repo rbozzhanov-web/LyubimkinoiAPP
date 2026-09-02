@@ -15,6 +15,7 @@ type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'lin
 
 export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster; palette: Palette }) {
   const monthKey = roster.period.start.slice(0, 7);
+  const monthLabel = formatMonthLabel(monthKey);
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState<Partial<PayProfile>>();
   const [month, setMonth] = useState<PayMonthOverrides>();
@@ -52,7 +53,13 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
   const paidLayovers = perDiem?.items.filter((item) => item.eligible) ?? [];
 
   return <>
-    <Pressable onPress={() => setOpen(true)} style={[styles.card, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]} accessibilityRole="button" accessibilityLabel="Open money details">
+    <Pressable onPress={() => setOpen(true)} style={[styles.card, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]} accessibilityRole="button" accessibilityLabel={`Open money details for ${monthLabel}`}>
+      <View style={styles.periodRow}>
+        <Text style={[styles.label, { color: palette.muted }]}>PAY PERIOD</Text>
+        <Text style={[styles.periodMonth, { color: palette.text }]}>{monthLabel}</Text>
+      </View>
+      <View style={[styles.divider, { backgroundColor: palette.line }]} />
+
       <View style={styles.headerRow}>
         <View style={styles.grow}>
           <Text style={[styles.label, { color: palette.muted }]}>PER DIEM</Text>
@@ -95,7 +102,7 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
         <View style={styles.sheetHeader}>
           <View style={styles.grow}>
             <Text style={[styles.sheetTitle, { color: palette.text }]}>Money</Text>
-            <Text style={[styles.meta, { color: palette.muted }]}>{monthKey}</Text>
+            <Text style={[styles.meta, { color: palette.muted }]}>{monthLabel}</Text>
           </View>
           <Pressable onPress={dismiss} style={[styles.close, { backgroundColor: palette.surface }]}><Text style={[styles.closeText, { color: palette.text }]}>×</Text></Pressable>
         </View>
@@ -174,6 +181,11 @@ function regionLabel(region: ReturnType<typeof calculatePerDiemMonth>['items'][n
   if (region === 'EU_UK') return 'EU / UK · $60 / UTC day';
   return 'Other foreign · $50 / UTC day';
 }
+function formatMonthLabel(value: string): string {
+  const [year, month] = value.split('-').map(Number);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) return value;
+  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, 1)));
+}
 function shortDate(value: string): string {
   const [date] = value.split('T');
   const [, month, day] = date.split('-');
@@ -185,6 +197,8 @@ function Line({ label, value, strong, palette }: { label: string; value: number;
 
 const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: 20, padding: 15 },
+  periodRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  periodMonth: { fontSize: 13, fontWeight: '700' },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   grow: { flex: 1 },
   label: { fontSize: 10, fontWeight: '700', letterSpacing: 1.1 },
