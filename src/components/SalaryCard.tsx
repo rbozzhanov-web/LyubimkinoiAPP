@@ -155,14 +155,12 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
                     <Text style={[styles.perDiemStation, { color: palette.text }]}>{item.stay.station}</Text>
                     <Text style={[styles.meta, { color: palette.muted }]}>{shortDate(item.stay.arrivalLocal)} · {formatStayDuration(item.stay.durationMinutes)} · {regionLabel(item.region)}</Text>
                   </View>
-                  <Text style={[styles.perDiemAmount, { color: item.needsClassification ? palette.rose : palette.accent }]}>{perDiemItemAmount(item)}</Text>
+                  <Text style={[styles.perDiemAmount, { color: palette.accent }]}>{perDiemItemAmount(item)}</Text>
                 </View>
                 {item.region === 'KZ' && item.eligible && <Text style={[styles.hint, { color: palette.muted }]}>{item.units} qualifying UTC day{item.units === 1 ? '' : 's'} · 3 MRP each</Text>}
-                {!item.eligible && !item.needsClassification && <Text style={[styles.hint, { color: palette.muted }]}>Does not meet the station-time threshold.</Text>}
-                {item.needsClassification && <Text style={[styles.hint, { color: palette.rose }]}>Station region is not confirmed yet, so no money is added.</Text>}
+                {!item.eligible && <Text style={[styles.hint, { color: palette.muted }]}>Does not meet the station-time threshold.</Text>}
               </View>)}
 
-              {perDiem.unresolvedStations.length > 0 && <Text style={[styles.hint, { color: palette.rose }]}>Needs classification: {perDiem.unresolvedStations.join(', ')}.</Text>}
               {!fx && <Text style={[styles.hint, { color: palette.muted }]}>NBRK rate is unavailable offline. Foreign per diem remains in USD and Kazakhstan per diem remains in KZT until an official rate is cached.</Text>}
             </> : <Text style={[styles.hint, { color: palette.muted }]}>Waiting for annual MRP.</Text>}
 
@@ -241,23 +239,20 @@ function perDiemHeadline(result: ReturnType<typeof calculatePerDiemMonth>, fx?: 
 
 function perDiemSubline(result: ReturnType<typeof calculatePerDiemMonth>, fx?: UsdKztSnapshot): string {
   const paid = result.items.filter((item) => item.eligible).length;
-  const unresolved = result.unresolvedStations.length;
   const rate = fx ? ` · USD/KZT ${fx.usdKzt.toFixed(2)}` : '';
-  return `${paid} qualifying layover${paid === 1 ? '' : 's'}${unresolved ? ` · ${unresolved} unresolved` : ''}${rate}`;
+  return `${paid} qualifying layover${paid === 1 ? '' : 's'}${rate}`;
 }
 
 function perDiemItemAmount(item: ReturnType<typeof calculatePerDiemMonth>['items'][number]): string {
-  if (item.needsClassification) return 'Check';
   if (!item.eligible) return '—';
   if (item.region === 'KZ') return formatKzt(item.kztAmount);
   return formatUsd(item.usdAmount);
 }
 
 function regionLabel(region: ReturnType<typeof calculatePerDiemMonth>['items'][number]['region']): string {
-  if (region === 'KZ') return 'Kazakhstan';
-  if (region === 'EU_UK') return 'EU / UK';
-  if (region === 'ASIA') return 'Asia';
-  return 'Unclassified';
+  if (region === 'KZ') return 'Kazakhstan · 3 MRP';
+  if (region === 'EU_UK') return 'EU / UK · $60';
+  return 'Other foreign · $50';
 }
 
 function shortDate(value: string): string {
