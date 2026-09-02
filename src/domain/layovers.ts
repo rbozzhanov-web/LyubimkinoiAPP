@@ -86,3 +86,12 @@ export function formatStayDuration(minutes: number): string {
 export function sumReportedBlockMinutes(rosters: ParsedAirAstanaRoster[]): number {
   return rosters.reduce((total, roster) => total + (roster.totals.blockMinutes ?? 0), 0);
 }
+
+/**
+ * Uses the airline's own monthly Night Hours field from each imported roster. This is the
+ * contractual/roster figure and intentionally remains distinct from a future astronomical
+ * darkness calculation along the aircraft track.
+ */
+export function sumReportedNightMinutes(rosters: ParsedAirAstanaRoster[]): number {
+  return rosters.reduce((total, roster) => total + (roster.totals.nightMinutes ?? 0), 0);
+}
