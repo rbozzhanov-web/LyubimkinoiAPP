@@ -8,16 +8,17 @@ import { IOSSheet } from './IOSOverlay';
 import { exportRosterCalendar } from '@/src/domain/calendar';
 import type { Duty, Sector } from '@/src/domain/types';
 import { verifyLovedModeCode } from '@/src/domain/lovedMode';
-import { DEFAULT_PROFILE } from '@/src/domain/profile';
+import { DEFAULT_PROFILE, type CrewProfile } from '@/src/domain/profile';
 import { sumReportedBlockMinutes, sumReportedNightMinutes } from '@/src/domain/layovers';
 import { formatMinutes, rosterMonthLabel, rosterToDuties } from '@/src/domain/rosterView';
 import { stationLocalDateTimeMs } from '@/src/domain/stationTime';
 import { pickAndParseRoster } from '@/src/import/pickRoster';
 import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
 import { clearPayData } from '@/src/storage/payStorage';
-import { clearStoredRosters, loadStoredRosters, upsertStoredRoster } from '@/src/storage/rosterStorage';
+import { clearStoredRosters, loadStoredRosters, removeStoredRoster, upsertStoredRoster } from '@/src/storage/rosterStorage';
 import { activateSpecialPayPreset } from '@/src/storage/specialPayPreset';
 import { clearLovedMode, loadLovedMode, saveLovedMode } from '@/src/storage/lovedModeStorage';
+import { clearCrewProfile, loadCrewProfile, saveCrewProfile } from '@/src/storage/profileStorage';
 
 type Tab = 'Home' | 'Roster' | 'Money' | 'More';
 const TABS: Tab[] = ['Home', 'Roster', 'Money', 'More'];
@@ -51,6 +52,7 @@ export default function MainScreen() {
   const [unlockCode, setUnlockCode] = useState('');
   const [unlockError, setUnlockError] = useState(false);
   const [codeInputFocused, setCodeInputFocused] = useState(false);
+  const [crewProfile, setCrewProfile] = useState<CrewProfile>(DEFAULT_PROFILE);
   const [rosters, setRosters] = useState<ParsedAirAstanaRoster[]>([]);
   const [activeMonth, setActiveMonth] = useState<string>();
   const [selectedFlight, setSelectedFlight] = useState<string>();
@@ -62,7 +64,10 @@ export default function MainScreen() {
   const tabSelection = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => { setLovedMode(loadLovedMode()); }, []);
+  useEffect(() => {
+    setLovedMode(loadLovedMode());
+    setCrewProfile(loadCrewProfile());
+  }, []);
 
   useEffect(() => {
     const stored = loadStoredRosters();
@@ -121,6 +126,18 @@ export default function MainScreen() {
     }
   };
 
+  const deleteRoster = (periodStart: string) => {
+    const next = removeStoredRoster(periodStart);
+    setRosters(next);
+    setSelectedFlight(undefined);
+    setActiveMonth((current) => current && current !== periodStart && next.some((item) => item.period.start === current) ? current : next.at(-1)?.period.start);
+  };
+
+  const updateCrewProfile = (contractRank: string) => {
+    const next = saveCrewProfile({ contractRank });
+    setCrewProfile(next);
+  };
+
   const changeMonth = (direction: -1 | 1) => {
     if (!roster) return;
     const index = rosters.findIndex((item) => item.period.start === roster.period.start);
@@ -166,7 +183,9 @@ export default function MainScreen() {
     clearStoredRosters();
     clearPayData();
     clearLovedMode();
+    clearCrewProfile();
     setLovedMode(false);
+    setCrewProfile(DEFAULT_PROFILE);
     setRosters([]);
     setActiveMonth(undefined);
     setSelectedFlight(undefined);
@@ -196,9 +215,9 @@ export default function MainScreen() {
 
       <SwipeSurface style={styles.viewport} onSwipeLeft={tab === 'More' ? undefined : () => changeTab(1)} onSwipeRight={tab === 'Home' ? undefined : () => changeTab(-1)}>
         {tab === 'Home' && <Home allDuties={allDuties} fallbackRoster={roster} rosters={rosters} palette={palette} onImport={importRoster} importing={importing} />}
-        {tab === 'Roster' && <RosterScreen roster={roster} rosters={rosters} duties={duties} selectedSector={selectedSector} palette={palette} importing={importing} error={importError} onImport={importRoster} onSelect={setSelectedFlight} onMonth={changeMonth} />}
+        {tab === 'Roster' && <RosterScreen roster={roster} rosters={rosters} duties={duties} selectedSector={selectedSector} palette={palette} profile={crewProfile} importing={importing} error={importError} onImport={importRoster} onSelect={setSelectedFlight} onMonth={changeMonth} />}
         {tab === 'Money' && <MoneyScreen key={`${roster?.period.start ?? 'none'}-${payRevision}`} roster={roster} palette={palette} />}
-        {tab === 'More' && <MoreScreen rosters={rosters} palette={palette} onErase={eraseAll} onSalarySettings={() => setSalarySettingsOpen(true)} />}
+        {tab === 'More' && <MoreScreen rosters={rosters} profile={crewProfile} palette={palette} onDeleteRoster={deleteRoster} onProfileChange={updateCrewProfile} onErase={eraseAll} onSalarySettings={() => setSalarySettingsOpen(true)} />}
       </SwipeSurface>
 
       <View
@@ -226,6 +245,8 @@ export default function MainScreen() {
           <Text style={[styles.unlockTitle, { color: palette.text }]}>Enter the code</Text>
           <Animated.View style={{ transform: [{ translateX: codeShakeX }] }}>
             <TextInput autoFocus value={unlockCode} secureTextEntry keyboardType="number-pad" maxLength={7}
+              placeholder="DDMMNNN"
+              placeholderTextColor={palette.muted}
               onChangeText={(value) => { setUnlockCode(value.replace(/\D/g, '').slice(0, 7)); setUnlockError(false); }}
               onSubmitEditing={submitCode}
               onFocus={() => setCodeInputFocused(true)}
@@ -237,7 +258,8 @@ export default function MainScreen() {
                 borderWidth: codeInputFocused ? 2 : 1,
               }]} />
           </Animated.View>
-          <Text style={[styles.codeHint, { color: unlockError ? palette.rose : palette.muted }]}>{unlockError ? 'That code did not unlock the mode.' : '7 digits'}</Text>
+          <Text style={[styles.codeHint, { color: unlockError ? palette.rose : palette.muted }]}>{unlockError ? 'That code did not unlock the mode.' : 'DD = date · MM = month · NNN = 3-digit flight number'}</Text>
+          {!unlockError && <Text style={[styles.codeExample, { color: palette.muted }]}>Example · Phuket in November: 1511123</Text>}
           <View style={styles.actions}>
             <Pressable onPress={() => setUnlockOpen(false)} style={[styles.action, { borderColor: palette.line }]}><Text style={{ color: palette.text }}>Cancel</Text></Pressable>
             <Pressable onPress={submitCode} style={[styles.action, { backgroundColor: palette.accent, borderColor: palette.accent }]}><Text style={styles.actionText}>Unlock</Text></Pressable>
@@ -334,7 +356,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
   </View>;
 }
 
-function RosterScreen({ roster, rosters, duties, selectedSector, palette, importing, error, onImport, onSelect, onMonth }: { roster?: ParsedAirAstanaRoster; rosters: ParsedAirAstanaRoster[]; duties: Duty[]; selectedSector?: Sector; palette: Palette; importing: boolean; error?: string; onImport: () => void; onSelect: (id?: string) => void; onMonth: (direction: -1 | 1) => void }) {
+function RosterScreen({ roster, rosters, duties, selectedSector, palette, profile, importing, error, onImport, onSelect, onMonth }: { roster?: ParsedAirAstanaRoster; rosters: ParsedAirAstanaRoster[]; duties: Duty[]; selectedSector?: Sector; palette: Palette; profile: CrewProfile; importing: boolean; error?: string; onImport: () => void; onSelect: (id?: string) => void; onMonth: (direction: -1 | 1) => void }) {
   const [calendarState, setCalendarState] = useState<'idle'|'working'|'done'|'error'>('idle');
   const index = roster ? rosters.findIndex((item) => item.period.start === roster.period.start) : -1;
   const flights = useMemo<FlightRow[]>(() => duties.flatMap((duty) => duty.sectors.map((sector) => ({ duty, sector }))), [duties]);
@@ -354,7 +376,7 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, import
 
   return <View style={styles.screen}>
     <View style={styles.titleRow}>
-      <View style={styles.grow}><Text style={[styles.sectionTitle, { color: palette.text }]}>{roster ? rosterMonthLabel(roster) : 'Roster'}</Text>{roster?.subject && <Text style={[styles.meta, { color: palette.muted }]}>{roster.subject.base ?? '—'} · contract {DEFAULT_PROFILE.contractRank}</Text>}</View>
+      <View style={styles.grow}><Text style={[styles.sectionTitle, { color: palette.text }]}>{roster ? rosterMonthLabel(roster) : 'Roster'}</Text>{roster?.subject && <Text style={[styles.meta, { color: palette.muted }]}>{roster.subject.base ?? '—'} · position {profile.contractRank}</Text>}</View>
       <View style={styles.titleActions}>
         {roster && <Pressable onPress={exportCalendar} disabled={calendarState === 'working'} style={[styles.compactButton, { backgroundColor: palette.surface, borderColor: palette.line }]}>{calendarState === 'working' ? <ActivityIndicator size="small" /> : <Text style={[styles.compactText, { color: palette.text }]}>{calendarState === 'done' ? 'Added' : calendarState === 'error' ? 'Retry' : 'Calendar'}</Text>}</Pressable>}
         <Pressable onPress={onImport} disabled={importing} style={[styles.compactButton, { backgroundColor: palette.accentSoft, borderColor: palette.accentSoft }]}>{importing ? <ActivityIndicator size="small" /> : <Text style={[styles.compactText, { color: palette.accent }]}>{roster ? 'Add PDF' : 'Import'}</Text>}</Pressable>
@@ -388,14 +410,77 @@ function MoneyScreen({ roster, palette }: { roster?: ParsedAirAstanaRoster; pale
   return <View style={styles.screen}><Text style={[styles.sectionTitle, { color: palette.text }]}>Money</Text>{roster ? <SalaryCard roster={roster} palette={palette} /> : <View style={[styles.emptyCard, styles.depthSurface, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster first.</Text></View>}</View>;
 }
 
-function MoreScreen({ rosters, palette, onErase, onSalarySettings }: { rosters: ParsedAirAstanaRoster[]; palette: Palette; onErase: () => void; onSalarySettings: () => void }) {
+function MoreScreen({ rosters, profile, palette, onDeleteRoster, onProfileChange, onErase, onSalarySettings }: { rosters: ParsedAirAstanaRoster[]; profile: CrewProfile; palette: Palette; onDeleteRoster: (periodStart: string) => void; onProfileChange: (contractRank: string) => void; onErase: () => void; onSalarySettings: () => void }) {
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [rankDraft, setRankDraft] = useState(profile.contractRank);
+  const [deleteCandidate, setDeleteCandidate] = useState<ParsedAirAstanaRoster>();
+
+  useEffect(() => { if (!profileOpen) setRankDraft(profile.contractRank); }, [profile.contractRank, profileOpen]);
+
+  const saveProfile = () => {
+    onProfileChange(rankDraft);
+    setProfileOpen(false);
+  };
+  const confirmDelete = () => {
+    if (!deleteCandidate) return;
+    onDeleteRoster(deleteCandidate.period.start);
+    setDeleteCandidate(undefined);
+  };
+
   return <View style={styles.screen}>
     <Text style={[styles.sectionTitle, { color: palette.text }]}>More</Text>
-    <InfoCard title="Profile" palette={palette}><Text style={[styles.meta, { color: palette.muted }]}>Contract position · {DEFAULT_PROFILE.contractRank}</Text><Text style={[styles.meta, { color: palette.muted }]}>Roster rank is display-only and never changes pay.</Text></InfoCard>
+    <Pressable onPress={() => { setRankDraft(profile.contractRank); setProfileOpen(true); }} style={[styles.settingsCard, styles.depthSurface, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]} accessibilityRole="button" accessibilityLabel="Edit profile position">
+      <View style={styles.grow}><Text style={[styles.cardTitle, { color: palette.text }]}>Profile</Text><Text style={[styles.meta, { color: palette.muted }]}>Position / rank · {profile.contractRank}</Text><Text style={[styles.meta, { color: palette.muted }]}>Display profile only · does not change pay rules</Text></View><Text style={[styles.chevron, { color: palette.accent }]}>›</Text>
+    </Pressable>
     <Pressable onPress={onSalarySettings} style={[styles.settingsCard, styles.depthSurface, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}><View style={styles.grow}><Text style={[styles.cardTitle, { color: palette.text }]}>Salary settings</Text><Text style={[styles.meta, { color: palette.muted }]}>Optional customization for another crew member</Text></View><Text style={[styles.chevron, { color: palette.accent }]}>›</Text></Pressable>
-    <InfoCard title="Local roster library" palette={palette}><Text style={[styles.meta, { color: palette.muted }]}>{rosters.length ? rosters.map(rosterMonthLabel).join(' · ') : 'No months imported'}</Text></InfoCard>
-    <InfoCard title="Privacy" palette={palette}><Text style={[styles.meta, { color: palette.muted }]}>Roster PDFs, crew lists and salary settings are processed locally. Only public MRP and USD/KZT values may be requested from official sources.</Text></InfoCard>
+
+    <View style={[styles.libraryCard, styles.depthSurface, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+      <Text style={[styles.cardTitle, { color: palette.text }]}>Imported rosters</Text>
+      {rosters.length ? <FlatList
+        data={rosters}
+        keyExtractor={(item) => item.period.start}
+        style={styles.libraryList}
+        showsVerticalScrollIndicator={false}
+        renderItem={({ item }) => <View style={[styles.libraryRow, { borderColor: palette.line }]}>
+          <View style={styles.grow}><Text style={[styles.libraryMonth, { color: palette.text }]}>{rosterMonthLabel(item)}</Text><Text style={[styles.meta, { color: palette.muted }]}>{item.subject?.base ?? 'Roster'} · parsed locally</Text></View>
+          <Pressable onPress={() => setDeleteCandidate(item)} hitSlop={8} style={[styles.deleteRosterButton, { backgroundColor: palette.surface }]} accessibilityRole="button" accessibilityLabel={`Delete ${rosterMonthLabel(item)} roster`}>
+            <Text style={[styles.deleteRosterText, { color: palette.rose }]}>Delete</Text>
+          </Pressable>
+        </View>}
+      /> : <Text style={[styles.meta, { color: palette.muted }]}>No months imported</Text>}
+    </View>
+
+    <InfoCard title="Privacy" palette={palette}><Text style={[styles.meta, { color: palette.muted }]}>Roster PDFs are parsed locally and the source PDF bytes are not stored. Crew lists, parsed roster data and salary settings stay on this device.</Text></InfoCard>
     {rosters.length > 0 && <Pressable onPress={onErase} style={[styles.secondaryButton, { borderColor: palette.line }]}><Text style={[styles.secondaryText, { color: palette.text }]}>Erase local roster & pay data</Text></Pressable>}
+
+    <Modal visible={profileOpen} transparent animationType="fade" onRequestClose={() => setProfileOpen(false)}>
+      <View style={styles.modalBackdrop}>
+        <View style={[styles.confirmCard, styles.depthSurface, WEB_GLASS, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+          <Text style={[styles.label, { color: palette.muted }]}>PROFILE</Text>
+          <Text style={[styles.confirmTitle, { color: palette.text }]}>Position / rank</Text>
+          <Text style={[styles.meta, { color: palette.muted }]}>This label is stored on this device and shown in your profile. It does not alter salary calculations.</Text>
+          <TextInput autoFocus value={rankDraft} onChangeText={setRankDraft} maxLength={24} autoCapitalize="characters" placeholder="e.g. FJ" placeholderTextColor={palette.muted} style={[styles.profileInput, { color: palette.text, backgroundColor: palette.surface, borderColor: palette.line }]} />
+          <View style={styles.actions}>
+            <Pressable onPress={() => setProfileOpen(false)} style={[styles.action, { borderColor: palette.line }]}><Text style={{ color: palette.text }}>Cancel</Text></Pressable>
+            <Pressable onPress={saveProfile} style={[styles.action, { backgroundColor: palette.accent, borderColor: palette.accent }]}><Text style={styles.actionText}>Save</Text></Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+
+    <Modal visible={Boolean(deleteCandidate)} transparent animationType="fade" onRequestClose={() => setDeleteCandidate(undefined)}>
+      <View style={styles.modalBackdrop}>
+        <View style={[styles.confirmCard, styles.depthSurface, WEB_GLASS, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+          <Text style={[styles.label, { color: palette.rose }]}>DELETE ROSTER</Text>
+          <Text style={[styles.confirmTitle, { color: palette.text }]}>{deleteCandidate ? rosterMonthLabel(deleteCandidate) : ''}</Text>
+          <Text style={[styles.meta, { color: palette.muted }]}>Remove this imported roster and its parsed crew data from this device? The original PDF file is not stored by KhaVair.</Text>
+          <View style={styles.actions}>
+            <Pressable onPress={() => setDeleteCandidate(undefined)} style={[styles.action, { borderColor: palette.line }]}><Text style={{ color: palette.text }}>Cancel</Text></Pressable>
+            <Pressable onPress={confirmDelete} style={[styles.action, { backgroundColor: palette.rose, borderColor: palette.rose }]}><Text style={styles.actionText}>Delete</Text></Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   </View>;
 }
 
@@ -511,8 +596,10 @@ const styles = StyleSheet.create({
   monthNav: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, monthNavText: { fontSize: 12, fontWeight: '600' }, error: { fontSize: 12 },
   emptyCard: { borderWidth: 1, borderRadius: 20, padding: 14 }, innerWindow: { flex: 1, minHeight: 0, borderWidth: 1, borderRadius: 20, overflow: 'hidden' }, listContent: { padding: 8, gap: 7, paddingBottom: 18 }, rosterCard: { borderWidth: 1, borderRadius: 16, padding: 13 }, flightCardTop: { flexDirection: 'row', justifyContent: 'space-between' }, flightNumber: { fontSize: 11, fontWeight: '700' }, rosterRoute: { fontSize: 20, fontWeight: '700', marginTop: 4 },
   infoCard: { borderWidth: 1, borderRadius: 20, padding: 14, gap: 3 }, cardTitle: { fontSize: 15, fontWeight: '700' }, settingsCard: { minHeight: 68, borderWidth: 1, borderRadius: 20, padding: 14, flexDirection: 'row', alignItems: 'center' }, chevron: { fontSize: 30 }, secondaryButton: { height: 48, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, secondaryText: { fontWeight: '600' },
+  libraryCard: { borderWidth: 1, borderRadius: 20, padding: 14, minHeight: 88, maxHeight: 190 }, libraryList: { marginTop: 5 }, libraryRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth }, libraryMonth: { fontSize: 14, fontWeight: '700' }, deleteRosterButton: { minWidth: 58, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 }, deleteRosterText: { fontSize: 11, fontWeight: '700' },
   depthSurface: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 24, elevation: 5 },
   tabBar: { height: 68, marginTop: 8, marginBottom: 4, borderWidth: 1, borderRadius: 22, flexDirection: 'row' }, tabSelection: { position: 'absolute', left: 4, top: 4, bottom: 4, borderRadius: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 2 }, tabItem: { flex: 1, zIndex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabIconWrap: { minWidth: 35, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, tabIcon: { textAlign: 'center' }, tabText: { fontSize: 11, fontWeight: '600' },
   sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end' }, flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderTopWidth: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 18, paddingBottom: 12, overflow: 'hidden' }, flightSheetContent: { minHeight: 0, flexShrink: 1 }, sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }, sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 }, swipeHint: { fontSize: 10, marginTop: 7 }, flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 7 }, crewScroll: { minHeight: 0, flexShrink: 1 }, crewList: { paddingBottom: 12 }, crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' }, avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, avatarText: { fontSize: 12, fontWeight: '800' }, crewName: { fontSize: 14, fontWeight: '600' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.56)', alignItems: 'center', justifyContent: 'center', padding: 20 }, unlockCard: { width: '100%', maxWidth: 390, borderWidth: 1, borderRadius: 26, padding: 20 }, unlockTitle: { fontSize: 26, fontWeight: '700', marginTop: 7 }, codeInput: { height: 54, borderWidth: 1, borderRadius: 15, marginTop: 18, paddingHorizontal: 16, fontSize: 22, letterSpacing: 5, textAlign: 'center' }, codeHint: { fontSize: 11, marginTop: 6 }, actions: { flexDirection: 'row', gap: 9, marginTop: 18 }, action: { flex: 1, height: 46, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.56)', alignItems: 'center', justifyContent: 'center', padding: 20 }, unlockCard: { width: '100%', maxWidth: 390, borderWidth: 1, borderRadius: 26, padding: 20 }, unlockTitle: { fontSize: 26, fontWeight: '700', marginTop: 7 }, codeInput: { height: 54, borderWidth: 1, borderRadius: 15, marginTop: 18, paddingHorizontal: 16, fontSize: 22, letterSpacing: 5, textAlign: 'center' }, codeHint: { fontSize: 11, lineHeight: 15, marginTop: 6 }, codeExample: { fontSize: 11, lineHeight: 15, marginTop: 2 }, actions: { flexDirection: 'row', gap: 9, marginTop: 18 }, action: { flex: 1, height: 46, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  confirmCard: { width: '100%', maxWidth: 390, borderWidth: 1, borderRadius: 26, padding: 20 }, confirmTitle: { fontSize: 24, lineHeight: 29, fontWeight: '700', marginTop: 6, marginBottom: 8 }, profileInput: { height: 50, borderWidth: 1, borderRadius: 14, marginTop: 15, paddingHorizontal: 14, fontSize: 17, fontWeight: '600' },
 });
