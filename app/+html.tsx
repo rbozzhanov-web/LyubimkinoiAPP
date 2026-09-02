@@ -19,7 +19,7 @@ const PRODUCTION_CSP = [
 const APP_SHELL_CSS = `
   html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; touch-action: manipulation; }
   html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
-  #root { height: calc(100dvh - 2.5mm); min-height: calc(100dvh - 2.5mm); transform: translateY(2.5mm); isolation: isolate; }
+  #root { height: calc(100dvh - 2.8mm); min-height: calc(100dvh - 2.8mm); transform: translateY(2.8mm); isolation: isolate; }
   #root * { -webkit-overflow-scrolling: touch; }
   body { background: #F4F1EC; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
 
