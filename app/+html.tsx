@@ -18,7 +18,7 @@ const PRODUCTION_CSP = [
 
 const APP_SHELL_CSS = `
   html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; touch-action: manipulation; }
-  #root { min-height: 100dvh; }
+  #root { height: calc(100dvh - 1mm); min-height: calc(100dvh - 1mm); transform: translateY(1mm); }
   body { background: #F4F1EC; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
   @media (prefers-color-scheme: dark) { body { background: #11110F; } }
 `;

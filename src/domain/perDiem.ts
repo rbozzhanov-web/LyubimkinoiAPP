@@ -51,19 +51,19 @@ export function getKazakhstanPerDiemKzt(mrpKzt: number): number {
 }
 
 /**
- * Kazakhstan rule used for the Astana relay: inspect UTC calendar-day slices and qualify the
- * relay when at least one slice contains strictly more than six hours at station. A relay is
- * still paid once only, even when it spans several UTC dates.
+ * Per diem is counted by UTC calendar day, not by the total relay duration.
+ * Every UTC day whose station-presence slice is strictly longer than the threshold
+ * earns one unit. A multi-day relay can therefore earn multiple units in one payout.
  */
 export function kazakhstanQualifyingUtcDays(stay: StationStay): number {
-  return qualifyingUtcDay(stay, PER_DIEM_RULES.KZ.minimumStationMinutes);
+  return qualifyingUtcDays(stay, PER_DIEM_RULES.KZ.minimumStationMinutes);
 }
 
 function foreignQualifyingUtcDays(stay: StationStay): number {
-  return qualifyingUtcDay(stay, PER_DIEM_RULES.FOREIGN_50.minimumStationMinutes);
+  return qualifyingUtcDays(stay, PER_DIEM_RULES.FOREIGN_50.minimumStationMinutes);
 }
 
-function qualifyingUtcDay(stay: StationStay, minimumStationMinutes: number): number {
+function qualifyingUtcDays(stay: StationStay, minimumStationMinutes: number): number {
   const start = stationLocalToUtcMs(stay.station, stay.arrivalLocal);
   const end = stationLocalToUtcMs(stay.station, stay.departureLocal);
   if (start === undefined || end === undefined || end <= start) return 0;
@@ -71,14 +71,15 @@ function qualifyingUtcDay(stay: StationStay, minimumStationMinutes: number): num
   const dayMs = 24 * 60 * 60 * 1000;
   const thresholdMs = minimumStationMinutes * 60 * 1000;
   let cursor = utcDayStart(start);
+  let units = 0;
 
   while (cursor < end) {
     const next = cursor + dayMs;
     const overlap = Math.max(0, Math.min(end, next) - Math.max(start, cursor));
-    if (overlap > thresholdMs) return 1;
+    if (overlap > thresholdMs) units += 1;
     cursor = next;
   }
-  return 0;
+  return units;
 }
 
 export function calculatePerDiemStay(stay: StationStay, mrpKzt: number, usdKzt?: number): PerDiemStayResult {
@@ -86,8 +87,9 @@ export function calculatePerDiemStay(stay: StationStay, mrpKzt: number, usdKzt?:
   const station = stay.station.trim().toUpperCase();
 
   if (region === 'KZ') {
-    // Current confirmed company rule for this app: within Kazakhstan only Astana is paid here.
-    if (station !== 'NQZ') {
+    // ALA is the home base and is not a downroute stay. Every other Kazakhstan station
+    // earns one 3-MRP unit for each UTC day with strictly more than six hours at station.
+    if (station === 'ALA') {
       return { stay, region, eligible: false, units: 0, usdAmount: 0, kztAmount: 0 };
     }
     const units = kazakhstanQualifyingUtcDays(stay);
@@ -102,15 +104,15 @@ export function calculatePerDiemStay(stay: StationStay, mrpKzt: number, usdKzt?:
     };
   }
 
-  // A foreign relay is paid once when any UTC-calendar-day slice has strictly more
-  // than two hours at station. Its total duration alone is not enough around midnight.
-  const eligible = foreignQualifyingUtcDays(stay) > 0;
-  const usdAmount = eligible ? (PER_DIEM_RULES[region].usdRate ?? 0) : 0;
+  // Foreign stations use the same UTC-day slicing rule with a >2h threshold.
+  // Each qualifying UTC day earns one regional rate unit ($50 or $60).
+  const units = foreignQualifyingUtcDays(stay);
+  const usdAmount = units * (PER_DIEM_RULES[region].usdRate ?? 0);
   return {
     stay,
     region,
-    eligible,
-    units: eligible ? 1 : 0,
+    eligible: units > 0,
+    units,
     usdAmount,
     kztAmount: usdKzt && usdKzt > 0 ? usdAmount * usdKzt : 0,
   };
