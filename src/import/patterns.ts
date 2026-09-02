@@ -10,7 +10,7 @@ export const CONTINUED_GLYPH = '↓';
 
 // Whole-day markers that must never be mistaken for a duty or a station.
 export const NON_DUTY_CODES = new Set([
-  'OFF', 'DOFF', 'UFF', 'SICK', 'AVLB', 'LVE', 'VAC', 'ULV', 'ROFF', 'NR', 'HOMS',
+  'OFF', 'DOFF', 'UFF', 'SICK', 'AVLB', 'LVE', 'VAC', 'ULV', 'ROFF', 'NR', 'HOMS', 'CHLD', 'BOFF',
 ]);
 
 export function parseDateDdMmYyyy(token: string): string | null {

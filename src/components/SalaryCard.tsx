@@ -133,9 +133,12 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
                 <Line label="Paid hours" value={calculation.hourBaseLine.amount} palette={palette} />
                 {calculation.hourSurchargeLines.filter((line) => line.amount > 0).map((line) => <Line key={line.label} label={line.label} value={line.amount} palette={palette} />)}
                 <Line label="Night" value={calculation.nightLine.amount} palette={palette} />
+                {calculation.holidayLine.amount > 0 && <Line label="Public holiday hours" value={calculation.holidayLine.amount} palette={palette} />}
+                {calculation.officialDayOffLine.amount > 0 && <Line label="Official day off hours" value={calculation.officialDayOffLine.amount} palette={palette} />}
                 <Line label="Sector supplements" value={calculation.sectorLines.reduce((sum, line) => sum + line.amount, 0)} palette={palette} />
                 {calculation.deadheadLine.amount > 0 && <Line label="Deadhead" value={calculation.deadheadLine.amount} palette={palette} />}
                 {calculation.sickLine.amount > 0 && <Line label={calculation.sickSource === 'known-payslip' ? 'Sick leave · known payslip' : 'Sick leave'} value={calculation.sickLine.amount} palette={palette} />}
+                {calculation.vacationLine.amount > 0 && <Line label={`Vacation pay · ${calculation.vacationDays} day${calculation.vacationDays === 1 ? '' : 's'}`} value={calculation.vacationLine.amount} palette={palette} />}
                 <Line label="Gross" value={calculation.gross} strong palette={palette} />
                 <Line label="OSMS" value={-calculation.osms} palette={palette} />
                 <Line label="OPV" value={-calculation.opv} palette={palette} />

@@ -14,6 +14,13 @@ export interface PayMonthOverrides {
   deadheadHours?: number;
   /** Known factual sick-pay amount from an issued payslip; used only when explicitly provided. */
   sickAmountOverride?: number;
+  /** Flight hours flown on a public holiday (e007 праздничные). Paid at one extra rate. */
+  holidayHours?: number;
+  /** Flight hours flown on an official day off (e007 офиц выходные). Paid at half an extra rate. */
+  officialDayOffHours?: number;
+  /** Vacation pay (отпускные) for this month. It is an average-earnings figure the roster
+   *  cannot derive, so it is taken from the payslip or the notice rather than computed. */
+  vacationAmountOverride?: number;
   /** Earnings included in the statutory average-pay calculation over the preceding 12 months. */
   sickEarnings12m?: number;
   /** Working hours in the same statutory calculation period. */
@@ -34,6 +41,8 @@ export interface PayCalculation {
   daysInMonth: number;
   sickDays: number;
   unfitDays: number;
+  vacationDays: number;
+  childLeaveDays: number;
   operatingSectors: number;
   deadheadSectors: number;
   paidHours: number;
@@ -48,9 +57,12 @@ export interface PayCalculation {
   salaryLine: PayLine;
   transportLine: PayLine;
   sickLine: PayLine;
+  vacationLine: PayLine;
   hourBaseLine: PayLine;
   hourSurchargeLines: PayLine[];
   nightLine: PayLine;
+  holidayLine: PayLine;
+  officialDayOffLine: PayLine;
   sectorLines: PayLine[];
   deadheadLine: PayLine;
   gross: number;
@@ -86,6 +98,10 @@ export const PAYROLL_RULES = {
   ],
   nightHoursShare: 0.5,
   nightPayMultiplier: 0.5,
+  // Hours flown on a public holiday carry one extra rate; an official day off carries half.
+  // Both read off the May payslip: 4.98 x 3100 = 15 438 and 7.1 x 3100 x 0.5 = 11 005.
+  holidayMultiplier: 1,
+  officialDayOffMultiplier: 0.5,
   deadheadMultiplier: 0.5,
   osmsRate: 0.02,
   opvRate: 0.1,
@@ -110,6 +126,9 @@ export function payReadiness(
 
   const deadheadSectors = roster.sectors.filter((sector) => sector.deadhead).length;
   if (deadheadSectors > 0 && !nonNegative(overrides?.deadheadHours)) missing.push('deadhead hours');
+
+  const vacationDays = (roster.absences ?? []).filter((absence) => absence.code === 'VAC').length;
+  if (vacationDays > 0 && !nonNegative(overrides?.vacationAmountOverride)) missing.push('vacation pay');
 
   const sickDays = (roster.absences ?? []).filter((absence) => absence.code === 'SICK').length;
   const hasKnownSickAmount = nonNegative(overrides?.sickAmountOverride);
@@ -146,8 +165,12 @@ export function calculateRosterPay(
   const absences = roster.absences ?? [];
   const sickDays = absences.filter((absence) => absence.code === 'SICK').length;
   const unfitDays = absences.filter((absence) => absence.code === 'UFF').length;
+  const vacationDays = absences.filter((absence) => absence.code === 'VAC').length;
+  const childLeaveDays = absences.filter((absence) => absence.code === 'CHLD').length;
   const daysInMonth = daysInCalendarMonth(roster.period.start.slice(0, 7));
-  const paidDays = Math.max(daysInMonth - sickDays - unfitDays, 0);
+  // Every recorded absence takes a day out of salary and transport. Confirmed against four
+  // payslips: 30-3, 31-4, 31-8 and 30-7 reproduce the issued day counts exactly.
+  const paidDays = Math.max(daysInMonth - absences.length, 0);
   const attendanceShare = paidDays / daysInMonth;
   const operatingSectors = roster.sectors.filter((sector) => !sector.deadhead).length;
   const deadheadSectors = roster.sectors.filter((sector) => sector.deadhead).length;
@@ -159,6 +182,12 @@ export function calculateRosterPay(
   const transportLine: PayLine = {
     label: 'Transport', units: paidDays, multiplier: attendanceShare,
     amount: round2(profile.monthlyTransport * attendanceShare),
+  };
+
+  const vacationAmount = round2(overrides.vacationAmountOverride ?? 0);
+  const vacationLine: PayLine = {
+    label: 'Vacation pay', units: vacationDays, multiplier: vacationDays > 0 ? round2(vacationAmount / vacationDays) : 0,
+    amount: vacationAmount,
   };
 
   const sickMonthlyCap = round2(mrpKzt * PAYROLL_RULES.sickMonthlyCapMrpMultiplier);
@@ -196,6 +225,19 @@ export function calculateRosterPay(
     amount: round0(nightHours * rate * PAYROLL_RULES.nightPayMultiplier),
   };
 
+  // The roster marks neither public holidays nor official days off, and the Kazakhstan
+  // holiday calendar moves each year, so these come from the payslip rather than being derived.
+  const holidayHours = round2(overrides.holidayHours ?? 0);
+  const holidayLine: PayLine = {
+    label: 'Holiday hours', units: holidayHours, multiplier: PAYROLL_RULES.holidayMultiplier,
+    amount: round0(holidayHours * rate * PAYROLL_RULES.holidayMultiplier),
+  };
+  const officialDayOffHours = round2(overrides.officialDayOffHours ?? 0);
+  const officialDayOffLine: PayLine = {
+    label: 'Official day off hours', units: officialDayOffHours, multiplier: PAYROLL_RULES.officialDayOffMultiplier,
+    amount: round0(officialDayOffHours * rate * PAYROLL_RULES.officialDayOffMultiplier),
+  };
+
   const sectorLines = PAYROLL_RULES.sectorBands.map((band) => {
     const units = unitsInBand(operatingSectors, band.from, band.to);
     return {
@@ -212,8 +254,9 @@ export function calculateRosterPay(
   };
 
   const gross = round2(
-    salaryLine.amount + transportLine.amount + sickLine.amount + hourBaseLine.amount +
+    salaryLine.amount + transportLine.amount + sickLine.amount + vacationLine.amount + hourBaseLine.amount +
     hourSurchargeLines.reduce((sum, line) => sum + line.amount, 0) + nightLine.amount +
+    holidayLine.amount + officialDayOffLine.amount +
     sectorLines.reduce((sum, line) => sum + line.amount, 0) + deadheadLine.amount,
   );
 
@@ -225,12 +268,12 @@ export function calculateRosterPay(
   const totalDeductions = round2(osms + opv + ipn);
 
   return {
-    paidDays, daysInMonth, sickDays, unfitDays, operatingSectors, deadheadSectors,
+    paidDays, daysInMonth, sickDays, unfitDays, vacationDays, childLeaveDays, operatingSectors, deadheadSectors,
     paidHours, paidHoursSource, crewPayNormVersion: readiness.crewPayNormVersion,
     crewPayNormAfterStatedPeriod: readiness.crewPayNormAfterStatedPeriod, nightHours,
     sickAverageHourly, sickMonthlyCap, sickCapped: knownSickAmount === undefined && sickRaw > sickMonthlyCap, sickSource,
-    salaryLine, transportLine, sickLine, hourBaseLine, hourSurchargeLines, nightLine,
-    sectorLines, deadheadLine, gross, osms, opv, ipnStandardDeduction, ipn,
+    salaryLine, transportLine, sickLine, vacationLine, hourBaseLine, hourSurchargeLines, nightLine,
+    holidayLine, officialDayOffLine, sectorLines, deadheadLine, gross, osms, opv, ipnStandardDeduction, ipn,
     totalDeductions, net: round2(gross - totalDeductions),
   };
 }

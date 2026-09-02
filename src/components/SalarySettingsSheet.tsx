@@ -13,6 +13,9 @@ type Draft = {
   monthlyTransport: string;
   paidHours: string;
   deadheadHours: string;
+  vacationAmount: string;
+  holidayHours: string;
+  officialDayOffHours: string;
   sickEarnings12m: string;
   sickWorkedHours12m: string;
   sickMissedHours: string;
@@ -45,6 +48,9 @@ export function SalarySettingsSheet({ visible, roster, palette, onClose, onSaved
         ...current,
         paidHours: optionalNumberFrom(draft.paidHours),
         deadheadHours: optionalNumberFrom(draft.deadheadHours),
+        vacationAmountOverride: optionalNumberFrom(draft.vacationAmount),
+        holidayHours: optionalNumberFrom(draft.holidayHours),
+        officialDayOffHours: optionalNumberFrom(draft.officialDayOffHours),
         sickEarnings12m: optionalNumberFrom(draft.sickEarnings12m),
         sickWorkedHours12m: optionalNumberFrom(draft.sickWorkedHours12m),
         sickMissedHours: optionalNumberFrom(draft.sickMissedHours),
@@ -56,6 +62,7 @@ export function SalarySettingsSheet({ visible, roster, palette, onClose, onSaved
   };
 
   const sickDays = roster?.absences?.filter((item) => item.code === 'SICK').length ?? 0;
+  const vacationDays = roster?.absences?.filter((item) => item.code === 'VAC').length ?? 0;
   const deadheadSectors = roster?.sectors.filter((item) => item.deadhead).length ?? 0;
 
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -78,6 +85,13 @@ export function SalarySettingsSheet({ visible, roster, palette, onClose, onSaved
             <Text style={[styles.section, { color: palette.text }]}>Current month overrides</Text>
             <Field label="Paid hours override · optional" value={draft.paidHours} onChange={(v) => setDraft((d) => ({ ...d, paidHours: v }))} palette={palette} />
             {deadheadSectors > 0 && <Field label="Deadhead paid hours" value={draft.deadheadHours} onChange={(v) => setDraft((d) => ({ ...d, deadheadHours: v }))} palette={palette} />}
+            {vacationDays > 0 && <>
+              <Text style={[styles.meta, { color: palette.muted }]}>{vacationDays} vacation day{vacationDays === 1 ? '' : 's'} this month. Vacation pay is an average-earnings figure the roster cannot derive — copy it from the payslip.</Text>
+              <Field label="Vacation pay · ₸" value={draft.vacationAmount} onChange={(v) => setDraft((d) => ({ ...d, vacationAmount: v }))} palette={palette} />
+            </>}
+            <Text style={[styles.meta, { color: palette.muted }]}>The roster does not mark public holidays. Enter these only if the payslip shows them.</Text>
+            <Field label="Hours flown on a public holiday" value={draft.holidayHours} onChange={(v) => setDraft((d) => ({ ...d, holidayHours: v }))} palette={palette} />
+            <Field label="Hours flown on an official day off" value={draft.officialDayOffHours} onChange={(v) => setDraft((d) => ({ ...d, officialDayOffHours: v }))} palette={palette} />
             {sickDays > 0 && <>
               <Text style={[styles.meta, { color: palette.muted }]}>For sick leave, Kazakhstan average-pay inputs can be entered when the 12-month history is available.</Text>
               <Field label="Included earnings · preceding 12 months" value={draft.sickEarnings12m} onChange={(v) => setDraft((d) => ({ ...d, sickEarnings12m: v }))} palette={palette} />
@@ -99,10 +113,10 @@ function Field({ label, value, onChange, palette }: { label: string; value: stri
     <TextInput value={value} onChangeText={(text) => onChange(text.replace(/[^0-9.,]/g, ''))} keyboardType="decimal-pad" placeholder="—" placeholderTextColor={palette.muted} style={[styles.input, { color: palette.text, backgroundColor: palette.surfaceStrong, borderColor: palette.line }]} />
   </View>;
 }
-function emptyDraft(): Draft { return { hourlyRate: '', monthlySalary: '', monthlyTransport: '', paidHours: '', deadheadHours: '', sickEarnings12m: '', sickWorkedHours12m: '', sickMissedHours: '' }; }
+function emptyDraft(): Draft { return { hourlyRate: '', monthlySalary: '', monthlyTransport: '', paidHours: '', deadheadHours: '', vacationAmount: '', holidayHours: '', officialDayOffHours: '', sickEarnings12m: '', sickWorkedHours12m: '', sickMissedHours: '' }; }
 function draftFrom(profile?: Partial<PayProfile>, month?: PayMonthOverrides): Draft {
   const show = (value?: number) => typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
-  return { hourlyRate: show(profile?.hourlyRate), monthlySalary: show(profile?.monthlySalary), monthlyTransport: show(profile?.monthlyTransport), paidHours: show(month?.paidHours), deadheadHours: show(month?.deadheadHours), sickEarnings12m: show(month?.sickEarnings12m), sickWorkedHours12m: show(month?.sickWorkedHours12m), sickMissedHours: show(month?.sickMissedHours) };
+  return { hourlyRate: show(profile?.hourlyRate), monthlySalary: show(profile?.monthlySalary), monthlyTransport: show(profile?.monthlyTransport), paidHours: show(month?.paidHours), deadheadHours: show(month?.deadheadHours), vacationAmount: show(month?.vacationAmountOverride), holidayHours: show(month?.holidayHours), officialDayOffHours: show(month?.officialDayOffHours), sickEarnings12m: show(month?.sickEarnings12m), sickWorkedHours12m: show(month?.sickWorkedHours12m), sickMissedHours: show(month?.sickMissedHours) };
 }
 function numberFrom(value: string): number { return Number(value.replace(',', '.')); }
 function optionalNumberFrom(value: string): number | undefined { if (!value.trim()) return undefined; const n = numberFrom(value); return Number.isFinite(n) ? n : undefined; }

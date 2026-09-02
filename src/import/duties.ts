@@ -7,11 +7,15 @@ export interface RosterSector {
   deadhead: boolean; actualTimes: boolean; dutyIndex: number; dutySectorIndex: number;
 }
 export interface RosterDuty { index: number; start?: string; end?: string; sectorCount: number }
-export interface RosterAbsence { code: 'SICK' | 'UFF'; date: string }
+export interface RosterAbsence { code: 'SICK' | 'UFF' | 'VAC' | 'CHLD'; date: string }
 export interface RosterReading { sectors: RosterSector[]; duties: RosterDuty[]; absences: RosterAbsence[]; unreadCells: string[] }
 const DELAY_LABEL = 'Delay';
 const GROUND_DUTY_CODE_RE = /^[A-Z][A-Z0-9_]{1,7}$/;
-const PAYROLL_ABSENCE_CODES = new Set<RosterAbsence['code']>(['SICK', 'UFF']);
+// Codes that take a day out of the salary and transport month. Verified against four
+// issued payslips: April 30-3 SICK = 27 days, July 31-(3 SICK + 1 UFF) = 27,
+// May 31-(7 CHLD + 1 VAC) = 23, June 30-7 VAC = 23. Rest codes (OFF, DOFF, ROFF, BOFF,
+// AVLB, HOMS) are paid days and must stay out of this set.
+const PAYROLL_ABSENCE_CODES = new Set<RosterAbsence['code']>(['SICK', 'UFF', 'VAC', 'CHLD']);
 
 export function readRoster(columns: DayColumn[], periodStart: string, periodEnd: string): RosterReading {
   const sectors: RosterSector[] = [];
