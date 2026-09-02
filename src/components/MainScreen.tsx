@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View, useColorScheme, useWindowDimensions } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, FlatList, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View, useColorScheme, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SalaryCard } from './SalaryCard';
 import { SalarySettingsSheet } from './SalarySettingsSheet';
@@ -37,6 +37,9 @@ type FocusDuty = RosterDuty & { reportMs: number; releaseMs: number };
 const WEB_GLASS = Platform.OS === 'web'
   ? ({ backdropFilter: 'blur(22px) saturate(1.18)', WebkitBackdropFilter: 'blur(22px) saturate(1.18)' } as any)
   : undefined;
+const WEB_TAB_GLASS = Platform.OS === 'web'
+  ? ({ backdropFilter: 'blur(30px) saturate(1.38)', WebkitBackdropFilter: 'blur(30px) saturate(1.38)' } as any)
+  : undefined;
 
 export default function MainScreen() {
   // The web build is prerendered to static HTML with the light palette baked into inline
@@ -62,6 +65,8 @@ export default function MainScreen() {
   const [importError, setImportError] = useState<string>();
   const [salarySettingsOpen, setSalarySettingsOpen] = useState(false);
   const [payRevision, setPayRevision] = useState(0);
+  const [tabBarWidth, setTabBarWidth] = useState(0);
+  const tabSelection = useRef(new Animated.Value(0)).current;
 
   // Defer the local read until after web hydration so the statically rendered page and the
   // first browser render agree. The saved preference then restores on this device only.
@@ -73,10 +78,23 @@ export default function MainScreen() {
     setActiveMonth(stored.at(-1)?.period.start);
   }, []);
 
+  useEffect(() => {
+    Animated.spring(tabSelection, {
+      toValue: TABS.indexOf(tab),
+      stiffness: 380,
+      damping: 34,
+      mass: 0.72,
+      useNativeDriver: true,
+      isInteraction: false,
+    }).start();
+  }, [tab, tabSelection]);
+
   const roster = rosters.find((item) => item.period.start === activeMonth) ?? rosters.at(-1);
   const duties = useMemo(() => roster ? rosterToDuties(roster) : [], [roster]);
   const selectedSector = duties.flatMap((duty) => duty.sectors).find((sector) => sector.id === selectedFlight);
   const allDuties = useMemo<RosterDuty[]>(() => rosters.flatMap((item) => rosterToDuties(item).map((duty) => ({ roster: item, duty }))), [rosters]);
+  const tabStep = tabBarWidth / TABS.length;
+  const tabIndicatorX = Animated.multiply(tabSelection, tabStep);
 
   const palette = useMemo<Palette>(() => ({
     background: lovedMode ? (dark ? '#1B1114' : '#FFF0E8') : (dark ? '#11110F' : '#F4F1EC'),
@@ -84,7 +102,7 @@ export default function MainScreen() {
     surfaceStrong: lovedMode ? (dark ? 'rgba(44,27,32,.84)' : 'rgba(255,255,255,.84)') : (dark ? 'rgba(37,35,31,.84)' : 'rgba(255,255,255,.84)'),
     text: lovedMode ? (dark ? '#FFF5F2' : '#2B1718') : (dark ? '#F7F4EF' : '#171714'),
     muted: lovedMode ? (dark ? '#DCB2AB' : '#7A4A45') : (dark ? '#B5AFA4' : '#5F5C55'),
-    line: lovedMode ? (dark ? '#5A363E' : '#EFB4A3') : (dark ? '#37342E' : '#DED7CB'),
+    line: lovedMode ? (dark ? 'rgba(255,213,205,.14)' : 'rgba(122,74,69,.12)') : (dark ? 'rgba(247,244,239,.12)' : 'rgba(47,57,52,.10)'),
     accent: lovedMode ? '#F06445' : (dark ? '#C7BDAE' : '#2F3934'),
     accentSoft: lovedMode ? (dark ? '#44231F' : '#FFD8C9') : (dark ? '#222925' : '#E6ECE8'),
     rose: lovedMode ? '#DE466D' : (dark ? '#C7BDAE' : '#2F3934'),
@@ -179,11 +197,18 @@ export default function MainScreen() {
         {tab === 'More' && <MoreScreen rosters={rosters} palette={palette} onErase={eraseAll} onSalarySettings={() => setSalarySettingsOpen(true)} />}
       </SwipeSurface>
 
-      <View style={[styles.tabBar, styles.depthSurface, WEB_GLASS, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+      <View
+        onLayout={(event) => {
+          const nextWidth = event.nativeEvent.layout.width;
+          if (Math.abs(nextWidth - tabBarWidth) > 0.5) setTabBarWidth(nextWidth);
+        }}
+        style={[styles.tabBar, styles.depthSurface, WEB_TAB_GLASS, { backgroundColor: palette.surface, borderColor: palette.line }]}
+      >
+        {tabBarWidth > 0 && <Animated.View pointerEvents="none" style={[styles.tabSelection, { width: Math.max(0, tabStep - 8), backgroundColor: palette.surfaceStrong, transform: [{ translateX: tabIndicatorX }] }]} />}
         {TABS.map((item) => {
           const active = item === tab;
           return <Pressable key={item} onPress={() => { setSelectedFlight(undefined); setTab(item); }} style={styles.tabItem} accessibilityRole="tab" accessibilityState={{ selected: active }}>
-            <View style={[styles.tabIconWrap, active && { backgroundColor: palette.accentSoft }]}><Text style={[styles.tabIcon, { color: active ? palette.accent : palette.muted, fontSize: TAB_ICONS[item].size, lineHeight: TAB_ICONS[item].size + 3, marginTop: TAB_ICONS[item].nudge, fontWeight: TAB_ICONS[item].weight }]}>{TAB_ICONS[item].glyph}</Text></View>
+            <View style={styles.tabIconWrap}><Text style={[styles.tabIcon, { color: active ? palette.accent : palette.muted, fontSize: TAB_ICONS[item].size, lineHeight: TAB_ICONS[item].size + 3, marginTop: TAB_ICONS[item].nudge, fontWeight: TAB_ICONS[item].weight }]}>{TAB_ICONS[item].glyph}</Text></View>
             <Text style={[styles.tabText, { color: active ? palette.text : palette.muted }]}>{item}</Text>
           </Pressable>;
         })}
@@ -367,13 +392,13 @@ function FlightDetail({ sector, dateLabel, palette, onClose, onPrevious, onNext 
     onClose={onClose}
     handleColor={palette.line}
     backdropOpacity={0.42}
-    style={[styles.flightSheet, WEB_GLASS, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
+    style={[styles.flightSheet, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
   >
-    {(dismiss) => <SwipeSurface style={styles.flightSheetContent} onSwipeDown={dismiss} onSwipeLeft={onNext} onSwipeRight={onPrevious} threshold={44}>
+    {(dismiss) => <SwipeSurface style={styles.flightSheetContent} onSwipeLeft={onNext} onSwipeRight={onPrevious} threshold={44}>
       <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text><Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime}</Text></View><Pressable onPress={dismiss} style={[styles.sheetClose, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.sheetCloseText, { color: palette.text }]}>×</Text></Pressable></View>
       <Text style={[styles.swipeHint, { color: palette.muted }]}>{onPrevious ? '‹ ' : ''}swipe flight{onNext ? ' ›' : ''} · swipe down to close</Text>
       <Text style={[styles.flyingWith, { color: palette.accent }]}>Flying with · {sector.crew.length}</Text>
-      {sector.crew.length ? <FlatList data={sector.crew} keyExtractor={(member) => member.id} style={styles.crewScroll} nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={styles.crewList} renderItem={({ item }) => <View style={styles.crewRow}><View style={[styles.avatar, { backgroundColor: palette.accentSoft }]}><Text style={[styles.avatarText, { color: palette.accent }]}>{item.name[0]}</Text></View><View style={styles.grow}><Text style={[styles.crewName, { color: palette.text }]}>{item.name}</Text><Text style={[styles.meta, { color: palette.muted }]}>{item.position ?? item.rosterRank ?? item.role}</Text></View></View>} /> : <Text style={[styles.meta, { color: palette.muted }]}>Crew is not listed for this flight in the imported report.</Text>}
+      {sector.crew.length ? <FlatList data={sector.crew} keyExtractor={(member) => member.id} style={styles.crewScroll} nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={styles.crewList} initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5} renderItem={({ item }) => <View style={styles.crewRow}><View style={[styles.avatar, { backgroundColor: palette.accentSoft }]}><Text style={[styles.avatarText, { color: palette.accent }]}>{item.name[0]}</Text></View><View style={styles.grow}><Text style={[styles.crewName, { color: palette.text }]}>{item.name}</Text><Text style={[styles.meta, { color: palette.muted }]}>{item.position ?? item.rosterRank ?? item.role}</Text></View></View>} /> : <Text style={[styles.meta, { color: palette.muted }]}>Crew is not listed for this flight in the imported report.</Text>}
     </SwipeSurface>}
   </IOSSheet>;
 }
@@ -449,8 +474,8 @@ const styles = StyleSheet.create({
   monthNav: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, monthNavText: { fontSize: 12, fontWeight: '600' }, error: { fontSize: 12 },
   emptyCard: { borderWidth: 1, borderRadius: 20, padding: 14 }, innerWindow: { flex: 1, minHeight: 0, borderWidth: 1, borderRadius: 20, overflow: 'hidden' }, listContent: { padding: 8, gap: 7, paddingBottom: 18 }, rosterCard: { borderWidth: 1, borderRadius: 16, padding: 13 }, flightCardTop: { flexDirection: 'row', justifyContent: 'space-between' }, flightNumber: { fontSize: 11, fontWeight: '700' }, rosterRoute: { fontSize: 20, fontWeight: '700', marginTop: 4 },
   infoCard: { borderWidth: 1, borderRadius: 20, padding: 14, gap: 3 }, cardTitle: { fontSize: 15, fontWeight: '700' }, settingsCard: { minHeight: 68, borderWidth: 1, borderRadius: 20, padding: 14, flexDirection: 'row', alignItems: 'center' }, chevron: { fontSize: 30 }, secondaryButton: { height: 48, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, secondaryText: { fontWeight: '600' },
-  depthSurface: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 20, elevation: 4 },
-  tabBar: { height: 68, marginTop: 8, marginBottom: 4, borderWidth: 1, borderRadius: 22, flexDirection: 'row' }, tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabIconWrap: { minWidth: 35, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, tabIcon: { textAlign: 'center' }, tabText: { fontSize: 11, fontWeight: '600' },
+  depthSurface: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 24, elevation: 5 },
+  tabBar: { height: 68, marginTop: 8, marginBottom: 4, borderWidth: 1, borderRadius: 22, flexDirection: 'row' }, tabSelection: { position: 'absolute', left: 4, top: 4, bottom: 4, borderRadius: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 2 }, tabItem: { flex: 1, zIndex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabIconWrap: { minWidth: 35, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, tabIcon: { textAlign: 'center' }, tabText: { fontSize: 11, fontWeight: '600' },
   sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end' }, flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderTopWidth: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 18, paddingBottom: 12, overflow: 'hidden' }, flightSheetContent: { minHeight: 0, flexShrink: 1 }, sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }, sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 }, sheetClose: { width: 44, height: 44, borderWidth: 1, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }, sheetCloseText: { fontSize: 27 }, swipeHint: { fontSize: 10, marginTop: 7 }, flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 7 }, crewScroll: { minHeight: 0, flexShrink: 1 }, crewList: { paddingBottom: 12 }, crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' }, avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, avatarText: { fontSize: 12, fontWeight: '800' }, crewName: { fontSize: 14, fontWeight: '600' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.46)', alignItems: 'center', justifyContent: 'center', padding: 20 }, unlockCard: { width: '100%', maxWidth: 390, borderWidth: 1, borderRadius: 26, padding: 20 }, unlockTitle: { fontSize: 26, fontWeight: '700', marginTop: 7 }, codeInput: { height: 54, borderWidth: 1, borderRadius: 15, marginTop: 18, paddingHorizontal: 16, fontSize: 22, letterSpacing: 5, textAlign: 'center' }, codeHint: { fontSize: 11, marginTop: 6 }, actions: { flexDirection: 'row', gap: 9, marginTop: 18 }, action: { flex: 1, height: 46, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
 });
