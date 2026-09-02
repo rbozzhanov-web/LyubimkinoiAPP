@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "KhaVair",
+    "slug": "khavair",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "khavair",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#2F3934"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./public/favicon-64.png",
+      "name": "KhaVair — Cabin Crew Companion",
+      "shortName": "KhaVair",
+      "themeColor": "#2F3934",
+      "backgroundColor": "#F4F1EC",
+      "display": "standalone"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

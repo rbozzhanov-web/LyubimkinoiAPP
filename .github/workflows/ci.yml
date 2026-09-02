@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - run: npm run typecheck
+      - name: Domain smoke tests
+        run: npm run test:domain
+      - name: Build offline-ready web bundle
+        run: npm run build:web
+      - name: Verify installable PWA assets
+        run: |
+          test -f dist/manifest.webmanifest
+          test -f dist/apple-touch-icon.png
+          test -f dist/icon-192.png
+          test -f dist/icon-512.png
+          test -f dist/favicon-64.png
+          test -f dist/sw.js
+          grep -q 'apple-mobile-web-app-title' dist/index.html
+          grep -q 'manifest.webmanifest' dist/index.html
+          grep -q 'Content-Security-Policy' dist/index.html
+          grep -q 'serviceWorker' dist/index.html
+          grep -q "khavair-" dist/sw.js
