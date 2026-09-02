@@ -30,6 +30,7 @@ export function rosterToDuties(roster: ParsedAirAstanaRoster): Duty[] {
     });
     return [{
       id: `duty-${first.date}-${duty.index}`,
+      date: first.date,
       dateLabel: `${String(date.getUTCDate()).padStart(2, '0')} ${MONTHS[date.getUTCMonth()]}`,
       reportTime: duty.start?.split('T')[1] ?? first.timeOut,
       releaseTime: duty.end?.split('T')[1] ?? sourceSectors[sourceSectors.length - 1].timeIn,
