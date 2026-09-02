@@ -46,19 +46,24 @@ function stay(station: string, arrivalLocal: string, departureLocal: string, dur
   };
 }
 
-// Kazakhstan: UTC midnight splits the presence interval; a UTC-day portion must be strictly >6h.
+// Kazakhstan: every UTC calendar day with strictly more than six hours at station pays one unit.
 equal(kazakhstanQualifyingUtcDays(stay('NQZ', '2026-07-07T06:09', '2026-07-07T19:22', 793)), 1, 'NQZ same UTC day');
 equal(kazakhstanQualifyingUtcDays(stay('NQZ', '2026-07-08T01:35', '2026-07-08T23:09', 1294)), 1, 'NQZ crossing UTC midnight');
 equal(kazakhstanQualifyingUtcDays(stay('NQZ', '2026-07-09T05:00', '2026-07-09T11:00', 360)), 0, 'exactly six hours is not enough');
+equal(kazakhstanQualifyingUtcDays(stay('NQZ', '2026-07-08T01:35', '2026-07-09T18:00', 2425)), 2, 'two qualifying UTC days pay two units');
 
-const kz = calculatePerDiemStay(stay('NQZ', '2026-07-07T06:09', '2026-07-07T19:22', 793), MRP_2026);
-equal(kz.kztAmount, 3 * MRP_2026, 'KZ per diem = 3 MRP');
-equal(kz.units, 1, 'KZ unit');
+const kz = calculatePerDiemStay(stay('NQZ', '2026-07-08T01:35', '2026-07-09T18:00', 2425), MRP_2026);
+equal(kz.kztAmount, 2 * 3 * MRP_2026, 'two KZ UTC days = two 3-MRP units');
+equal(kz.units, 2, 'KZ multi-day units');
+const kzOtherStation = calculatePerDiemStay(stay('SCO', '2026-07-01T10:00', '2026-07-01T18:00', 480), MRP_2026);
+equal(kzOtherStation.units, 1, 'Kazakhstan station outside ALA qualifies');
+equal(kzOtherStation.kztAmount, 3 * MRP_2026, 'Kazakhstan station uses 3 MRP');
 
-// Foreign: one unit per qualifying relay (>2h). EU/UK is $60; every other foreign station is $50.
+// Foreign: every UTC calendar day with strictly more than two hours at station pays one regional unit.
+// CXR 09:03 local to 09:41 next day covers >2h on both UTC dates, so it earns two $50 units.
 const cxr = calculatePerDiemStay(stay('CXR', '2026-07-09T09:03', '2026-07-10T09:41', 1478), MRP_2026);
-equal(cxr.units, 1, 'CXR one relay unit');
-equal(cxr.usdAmount, 50, 'CXR foreign rate');
+equal(cxr.units, 2, 'CXR two UTC-day units');
+equal(cxr.usdAmount, 100, 'CXR two foreign rates');
 equal(classifyPerDiemStation('IST'), 'FOREIGN_50', 'Turkey uses the $50 bucket');
 equal(calculatePerDiemStay(stay('BUS', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 50, 'Georgia $50');
 equal(calculatePerDiemStay(stay('DME', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 50, 'Russia $50');
@@ -68,15 +73,20 @@ equal(calculatePerDiemStay(stay('HER', '2026-07-01T10:00', '2026-07-01T14:00', 2
 equal(calculatePerDiemStay(stay('FRA', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 60, 'EU Germany $60');
 equal(calculatePerDiemStay(stay('LHR', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 60, 'UK $60');
 
-// Foreign layovers also qualify against UTC calendar-day slices. A relay spanning three
-// hours can still be unpaid when midnight UTC divides it into slices of no more than two hours.
+// A relay spanning three local hours can still be unpaid when UTC midnight divides it into
+// slices of no more than two hours. Exactly two hours in one UTC day is also not enough.
 const splitForeign = calculatePerDiemStay(stay('IST', '2026-07-08T01:30', '2026-07-08T04:30', 180), MRP_2026);
 equal(splitForeign.eligible, false, 'foreign slices of 1:30 each do not qualify');
 equal(splitForeign.units, 0, 'unqualified foreign relay has no unit');
+const exactTwoForeign = calculatePerDiemStay(stay('IST', '2026-07-08T03:00', '2026-07-08T05:00', 120), MRP_2026);
+equal(exactTwoForeign.units, 0, 'exactly two UTC hours is not enough');
 
 const qualifyingForeign = calculatePerDiemStay(stay('IST', '2026-07-08T01:30', '2026-07-08T05:30', 240), MRP_2026);
 equal(qualifyingForeign.eligible, true, 'foreign UTC slice over two hours qualifies');
-equal(qualifyingForeign.units, 1, 'foreign relay still pays once');
+equal(qualifyingForeign.units, 1, 'one qualifying foreign UTC day pays once');
+const twoDayForeign = calculatePerDiemStay(stay('IST', '2026-07-07T03:00', '2026-07-08T08:00', 1740), MRP_2026);
+equal(twoDayForeign.units, 2, 'two qualifying foreign UTC days pay two units');
+equal(twoDayForeign.usdAmount, 100, 'two $50 UTC-day units are combined in one stay payout');
 
 // Other Crew often continues onto page 2 without repeating the table heading. This synthetic
 // fixture locks the real August failure mode without storing any real employee data in the repo.
