@@ -26,6 +26,14 @@ const APP_SHELL_CSS = `
   @media (prefers-color-scheme: dark) { body { background: #11110F; } }
 `;
 
+const REGISTER_SW = `
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
+    });
+  }
+`;
+
 export default function Root({ children }: { children: ReactNode }) {
   const { bodyAttributes, bodyNodes, htmlAttributes, headNodes } = useServerDocumentContext();
   const production = process.env.NODE_ENV === 'production';
@@ -56,6 +64,7 @@ export default function Root({ children }: { children: ReactNode }) {
     <body {...bodyAttributes}>
       {children}
       {bodyNodes}
+      {production && <script dangerouslySetInnerHTML={{ __html: REGISTER_SW }} />}
     </body>
   </html>;
 }
