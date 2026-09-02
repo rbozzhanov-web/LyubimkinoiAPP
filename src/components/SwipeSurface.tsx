@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { Animated, Easing, PanResponder, Platform, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { swipeAxis, type SwipeAxis } from '@/src/domain/gesture';
+import { softHaptic } from './haptics';
 
 type Props = {
   children: ReactNode;
@@ -23,6 +24,8 @@ export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwi
   const translation = useRef(new Animated.ValueXY()).current;
   const activeAxis = useRef<SwipeAxis | undefined>(undefined);
   const size = useRef({ width: 360, height: 640 });
+  // Block only while the old page is leaving. As soon as the callback swaps in the
+  // next page, a fresh gesture may interrupt its entry spring immediately.
   const transitioning = useRef(false);
 
   const reset = useCallback(() => {
@@ -52,17 +55,23 @@ export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwi
       if (!finished) { settle(); return; }
 
       callback();
+      softHaptic();
       translation.setValue({ x: -direction * width, y: 0 });
+      // The page is now swapped. Do not wait for its entry spring before accepting
+      // the next swipe; a new PanResponder grant will stop this spring cleanly.
+      transitioning.current = false;
       requestAnimationFrame(() => {
         Animated.spring(translation.x, {
           toValue: 0,
           ...ENTRY_SPRING,
           velocity: direction * Math.min(2, Math.max(0.45, speed)),
           isInteraction: false,
-        }).start(() => reset());
+        }).start(({ finished: entryFinished }) => {
+          if (entryFinished) translation.setValue({ x: 0, y: 0 });
+        });
       });
     });
-  }, [reset, settle, translation]);
+  }, [settle, translation]);
 
   const completeDown = useCallback((callback: () => void) => {
     if (transitioning.current) return;
@@ -75,7 +84,7 @@ export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwi
       useNativeDriver: true,
       isInteraction: false,
     }).start(({ finished }) => {
-      if (finished) callback();
+      if (finished) { softHaptic(); callback(); }
       reset();
     });
   }, [reset, translation]);
