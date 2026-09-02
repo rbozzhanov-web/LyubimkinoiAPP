@@ -21,14 +21,11 @@ import { clearLovedMode, loadLovedMode, saveLovedMode } from '@/src/storage/love
 
 type Tab = 'Home' | 'Roster' | 'Money' | 'More';
 const TABS: Tab[] = ['Home', 'Roster', 'Money', 'More'];
-// These glyphs are drawn from four different Unicode blocks, so at one font size they do
-// not match: the house sits small and light, the tenge sign reads as text, the dots sit low.
-// Size and nudge each so the row looks like one set.
 const TAB_ICONS: Record<Tab, { glyph: string; size: number; nudge: number; weight: '700' | '800' }> = {
-  Home: { glyph: '⌂', size: 25, nudge: -1, weight: '700' },
-  Roster: { glyph: '✈︎', size: 18, nudge: 0, weight: '700' },
-  Money: { glyph: '₸', size: 19, nudge: 0, weight: '800' },
-  More: { glyph: '•••', size: 15, nudge: -3, weight: '700' },
+  Home: { glyph: '⌂', size: 24, nudge: 0, weight: '700' },
+  Roster: { glyph: '✈︎', size: 22, nudge: 0, weight: '700' },
+  Money: { glyph: '₸', size: 22, nudge: 0, weight: '800' },
+  More: { glyph: '•••', size: 18, nudge: -2, weight: '700' },
 };
 type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua'|'weekend', string>;
 type FlightRow = { duty: Duty; sector: Sector };
@@ -53,6 +50,7 @@ export default function MainScreen() {
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [unlockCode, setUnlockCode] = useState('');
   const [unlockError, setUnlockError] = useState(false);
+  const [codeInputFocused, setCodeInputFocused] = useState(false);
   const [rosters, setRosters] = useState<ParsedAirAstanaRoster[]>([]);
   const [activeMonth, setActiveMonth] = useState<string>();
   const [selectedFlight, setSelectedFlight] = useState<string>();
@@ -62,6 +60,7 @@ export default function MainScreen() {
   const [payRevision, setPayRevision] = useState(0);
   const [tabBarWidth, setTabBarWidth] = useState(0);
   const tabSelection = useRef(new Animated.Value(0)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => { setLovedMode(loadLovedMode()); }, []);
 
@@ -88,19 +87,20 @@ export default function MainScreen() {
   const allDuties = useMemo<RosterDuty[]>(() => rosters.flatMap((item) => rosterToDuties(item).map((duty) => ({ roster: item, duty }))), [rosters]);
   const tabStep = tabBarWidth / TABS.length;
   const tabIndicatorX = Animated.multiply(tabSelection, tabStep);
+  const codeShakeX = shakeAnim.interpolate({ inputRange: [-1, 0, 1], outputRange: [-7, 0, 7] });
 
   const palette = useMemo<Palette>(() => ({
     background: lovedMode ? (dark ? '#1B1114' : '#FFF0E8') : (dark ? '#11110F' : '#F4F1EC'),
     surface: lovedMode ? (dark ? 'rgba(36,23,26,.76)' : 'rgba(255,247,242,.76)') : (dark ? 'rgba(27,26,24,.78)' : 'rgba(252,250,247,.78)'),
     surfaceStrong: lovedMode ? (dark ? 'rgba(44,27,32,.84)' : 'rgba(255,255,255,.84)') : (dark ? 'rgba(37,35,31,.84)' : 'rgba(255,255,255,.84)'),
     text: lovedMode ? (dark ? '#FFF5F2' : '#2B1718') : (dark ? '#F7F4EF' : '#171714'),
-    muted: lovedMode ? (dark ? '#DCB2AB' : '#7A4A45') : (dark ? '#B5AFA4' : '#5F5C55'),
+    muted: lovedMode ? (dark ? '#DCB2AB' : '#5C3D37') : (dark ? '#B5AFA4' : '#4A4540'),
     line: lovedMode ? (dark ? 'rgba(255,213,205,.14)' : 'rgba(122,74,69,.12)') : (dark ? 'rgba(247,244,239,.12)' : 'rgba(47,57,52,.10)'),
     accent: lovedMode ? '#F06445' : (dark ? '#C7BDAE' : '#2F3934'),
     accentSoft: lovedMode ? (dark ? '#44231F' : '#FFD8C9') : (dark ? '#222925' : '#E6ECE8'),
-    rose: lovedMode ? '#DE466D' : (dark ? '#C7BDAE' : '#2F3934'),
+    rose: lovedMode ? '#DE466D' : (dark ? '#D79A9F' : '#C23B50'),
     aqua: lovedMode ? '#2EC5D2' : (dark ? '#B5AFA4' : '#5F5C55'),
-    weekend: lovedMode ? (dark ? '#D88C82' : '#BE5559') : (dark ? '#DE8580' : '#B84E4E'),
+    weekend: lovedMode ? (dark ? '#D88C82' : '#963A3F') : (dark ? '#DE8580' : '#8B3A3F'),
   }), [dark, lovedMode]);
 
   const importRoster = async () => {
@@ -143,7 +143,17 @@ export default function MainScreen() {
     setUnlockOpen(true);
   };
   const submitCode = () => {
-    if (!verifyLovedModeCode(unlockCode)) { setUnlockError(true); return; }
+    if (!verifyLovedModeCode(unlockCode)) {
+      setUnlockError(true);
+      shakeAnim.stopAnimation();
+      shakeAnim.setValue(0);
+      Animated.sequence([
+        Animated.timing(shakeAnim, { toValue: 1, duration: 70, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: -1, duration: 90, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: 0, duration: 70, useNativeDriver: true }),
+      ]).start();
+      return;
+    }
     activateSpecialPayPreset();
     saveLovedMode();
     setPayRevision((value) => value + 1);
@@ -214,10 +224,19 @@ export default function MainScreen() {
         <View style={[styles.unlockCard, styles.depthSurface, WEB_GLASS, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
           <Text style={[styles.label, { color: palette.rose }]}>FOR SOMEONE SPECIAL</Text>
           <Text style={[styles.unlockTitle, { color: palette.text }]}>Enter the code</Text>
-          <TextInput autoFocus value={unlockCode} secureTextEntry keyboardType="number-pad" maxLength={7}
-            onChangeText={(value) => { setUnlockCode(value.replace(/\D/g, '').slice(0, 7)); setUnlockError(false); }}
-            onSubmitEditing={submitCode}
-            style={[styles.codeInput, { color: palette.text, backgroundColor: palette.surface, borderColor: unlockError ? palette.rose : palette.line }]} />
+          <Animated.View style={{ transform: [{ translateX: codeShakeX }] }}>
+            <TextInput autoFocus value={unlockCode} secureTextEntry keyboardType="number-pad" maxLength={7}
+              onChangeText={(value) => { setUnlockCode(value.replace(/\D/g, '').slice(0, 7)); setUnlockError(false); }}
+              onSubmitEditing={submitCode}
+              onFocus={() => setCodeInputFocused(true)}
+              onBlur={() => setCodeInputFocused(false)}
+              style={[styles.codeInput, {
+                color: palette.text,
+                backgroundColor: palette.surface,
+                borderColor: unlockError ? palette.rose : codeInputFocused ? palette.accent : palette.line,
+                borderWidth: codeInputFocused ? 2 : 1,
+              }]} />
+          </Animated.View>
           <Text style={[styles.codeHint, { color: unlockError ? palette.rose : palette.muted }]}>{unlockError ? 'That code did not unlock the mode.' : '7 digits'}</Text>
           <View style={styles.actions}>
             <Pressable onPress={() => setUnlockOpen(false)} style={[styles.action, { borderColor: palette.line }]}><Text style={{ color: palette.text }}>Cancel</Text></Pressable>
@@ -478,5 +497,5 @@ const styles = StyleSheet.create({
   depthSurface: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 24, elevation: 5 },
   tabBar: { height: 68, marginTop: 8, marginBottom: 4, borderWidth: 1, borderRadius: 22, flexDirection: 'row' }, tabSelection: { position: 'absolute', left: 4, top: 4, bottom: 4, borderRadius: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 2 }, tabItem: { flex: 1, zIndex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabIconWrap: { minWidth: 35, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, tabIcon: { textAlign: 'center' }, tabText: { fontSize: 11, fontWeight: '600' },
   sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end' }, flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderTopWidth: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 18, paddingBottom: 12, overflow: 'hidden' }, flightSheetContent: { minHeight: 0, flexShrink: 1 }, sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }, sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 }, swipeHint: { fontSize: 10, marginTop: 7 }, flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 7 }, crewScroll: { minHeight: 0, flexShrink: 1 }, crewList: { paddingBottom: 12 }, crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' }, avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, avatarText: { fontSize: 12, fontWeight: '800' }, crewName: { fontSize: 14, fontWeight: '600' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.46)', alignItems: 'center', justifyContent: 'center', padding: 20 }, unlockCard: { width: '100%', maxWidth: 390, borderWidth: 1, borderRadius: 26, padding: 20 }, unlockTitle: { fontSize: 26, fontWeight: '700', marginTop: 7 }, codeInput: { height: 54, borderWidth: 1, borderRadius: 15, marginTop: 18, paddingHorizontal: 16, fontSize: 22, letterSpacing: 5, textAlign: 'center' }, codeHint: { fontSize: 11, marginTop: 6 }, actions: { flexDirection: 'row', gap: 9, marginTop: 18 }, action: { flex: 1, height: 46, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.56)', alignItems: 'center', justifyContent: 'center', padding: 20 }, unlockCard: { width: '100%', maxWidth: 390, borderWidth: 1, borderRadius: 26, padding: 20 }, unlockTitle: { fontSize: 26, fontWeight: '700', marginTop: 7 }, codeInput: { height: 54, borderWidth: 1, borderRadius: 15, marginTop: 18, paddingHorizontal: 16, fontSize: 22, letterSpacing: 5, textAlign: 'center' }, codeHint: { fontSize: 11, marginTop: 6 }, actions: { flexDirection: 'row', gap: 9, marginTop: 18 }, action: { flex: 1, height: 46, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
 });
