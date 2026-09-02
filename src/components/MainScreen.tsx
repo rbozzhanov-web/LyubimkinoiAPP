@@ -42,11 +42,6 @@ const WEB_TAB_GLASS = Platform.OS === 'web'
   : undefined;
 
 export default function MainScreen() {
-  // The web build is prerendered to static HTML with the light palette baked into inline
-  // styles. React does not repaint attributes it accepted during hydration, so if the very
-  // first client render already said "dark", the page keeps the server's light background
-  // for good and only later-mounted subtrees turn dark. Render light once to match the
-  // server, then switch: the palette then differs between renders and React patches it.
   const scheme = useColorScheme();
   const { width } = useWindowDimensions();
   const desktopWeb = Platform.OS === 'web' && width >= 768;
@@ -68,8 +63,6 @@ export default function MainScreen() {
   const [tabBarWidth, setTabBarWidth] = useState(0);
   const tabSelection = useRef(new Animated.Value(0)).current;
 
-  // Defer the local read until after web hydration so the statically rendered page and the
-  // first browser render agree. The saved preference then restores on this device only.
   useEffect(() => { setLovedMode(loadLovedMode()); }, []);
 
   useEffect(() => {
@@ -257,9 +250,6 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
   const isUpcoming = reportMs !== undefined && reportMs > now;
   const isActive = reportMs !== undefined && releaseMs !== undefined && reportMs <= now && releaseMs >= now;
   const countdown = reportMs === undefined ? undefined : isUpcoming ? formatCountdown(reportMs - now) : isActive ? formatCountdown(now - reportMs) : undefined;
-  // Duty length is the one span the roster does not print but a reader always wants.
-  // A misread midnight crossing can put release before report; show nothing rather than
-  // a negative clock reading.
   const spanMinutes = reportMs !== undefined && releaseMs !== undefined ? Math.round((releaseMs - reportMs) / 60000) : undefined;
   const dutyMinutes = spanMinutes !== undefined && spanMinutes > 0 ? spanMinutes : undefined;
 
@@ -268,9 +258,8 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
   const block = roster.totals.blockMinutes;
   const night = roster.totals.nightMinutes;
   const nightShare = block && night !== undefined ? Math.round((night / block) * 100) : undefined;
-
-  // The duties either side of the focus, so the screen answers "and then what?".
   const neighbours = adjacentDuties(timeline, focus, isUpcoming || isActive, 6);
+  const showingPrevious = !isUpcoming && !isActive;
 
   return <View style={styles.screen}>
     <View style={styles.dutyHead}>
@@ -289,8 +278,6 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
       </View>
 
       <View style={[styles.timeDivider, { backgroundColor: palette.line }]} />
-
-      {/* Four readings of one duty: same size, told apart by their labels rather than by scale. */}
       <View style={styles.timeRow}>
         <TimeCell label="REPORT" value={duty.reportTime} palette={palette} />
         <TimeCell label={`DEP · ${first.departure}`} value={first.departureTime} palette={palette} />
@@ -313,12 +300,15 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
     </Text>}
 
     {neighbours.length > 0 && <View style={styles.upNext}>
-      <Text style={[styles.label, { color: palette.muted }]}>{isUpcoming || isActive ? 'THEN' : 'BEFORE THAT'}</Text>
+      <Text style={[styles.label, { color: palette.muted }]}>{showingPrevious ? 'PREVIOUS FLIGHT' : 'THEN'}</Text>
       <FlatList data={neighbours} keyExtractor={(item) => item.duty.id} showsVerticalScrollIndicator={false} style={styles.upNextList}
         renderItem={({ item }) => <View style={[styles.upNextRow, { borderColor: palette.line }]}>
           <Text style={[styles.upNextDate, { color: palette.muted }]}>{item.duty.dateLabel}</Text>
           <Text numberOfLines={1} style={[styles.upNextRoute, { color: palette.text }]}>{routeChain(item.duty)}</Text>
-          <Text style={[styles.upNextTime, { color: palette.muted }]}>{isUpcoming || isActive ? item.duty.reportTime : item.duty.releaseTime}</Text>
+          <View style={styles.upNextTimeBlock}>
+            {showingPrevious && <Text style={[styles.upNextTimeLabel, { color: palette.muted }]}>RELEASED AT</Text>}
+            <Text style={[styles.upNextTime, { color: palette.muted }]}>{showingPrevious ? item.duty.releaseTime : item.duty.reportTime}</Text>
+          </View>
         </View>} />
     </View>}
   </View>;
@@ -394,12 +384,12 @@ function FlightDetail({ sector, dateLabel, palette, onClose, onPrevious, onNext 
     backdropOpacity={0.42}
     style={[styles.flightSheet, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
   >
-    {(dismiss) => <SwipeSurface style={styles.flightSheetContent} onSwipeLeft={onNext} onSwipeRight={onPrevious} threshold={44}>
-      <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text><Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime}</Text></View><Pressable onPress={dismiss} style={[styles.sheetClose, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.sheetCloseText, { color: palette.text }]}>×</Text></Pressable></View>
+    <SwipeSurface style={styles.flightSheetContent} onSwipeLeft={onNext} onSwipeRight={onPrevious} threshold={44}>
+      <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text><Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime}</Text></View></View>
       <Text style={[styles.swipeHint, { color: palette.muted }]}>{onPrevious ? '‹ ' : ''}swipe flight{onNext ? ' ›' : ''} · swipe down to close</Text>
       <Text style={[styles.flyingWith, { color: palette.accent }]}>Flying with · {sector.crew.length}</Text>
       {sector.crew.length ? <FlatList data={sector.crew} keyExtractor={(member) => member.id} style={styles.crewScroll} nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={styles.crewList} initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5} renderItem={({ item }) => <View style={styles.crewRow}><View style={[styles.avatar, { backgroundColor: palette.accentSoft }]}><Text style={[styles.avatarText, { color: palette.accent }]}>{item.name[0]}</Text></View><View style={styles.grow}><Text style={[styles.crewName, { color: palette.text }]}>{item.name}</Text><Text style={[styles.meta, { color: palette.muted }]}>{item.position ?? item.rosterRank ?? item.role}</Text></View></View>} /> : <Text style={[styles.meta, { color: palette.muted }]}>Crew is not listed for this flight in the imported report.</Text>}
-    </SwipeSurface>}
+    </SwipeSurface>
   </IOSSheet>;
 }
 
@@ -408,7 +398,6 @@ function useNow(): number {
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   return now;
 }
-/** Every duty that can be placed on a real clock, in report order. */
 function timedDuties(items: RosterDuty[]): FocusDuty[] {
   return items.flatMap((item) => {
     const duty = item.duty;
@@ -429,7 +418,6 @@ function pickFocusDuty(timed: FocusDuty[], now: number): FocusDuty | undefined {
   return timed[timed.length - 1];
 }
 
-/** The duties just after the focus when it is ahead of us, just before it when it is behind. */
 function adjacentDuties(timed: FocusDuty[], focus: FocusDuty | undefined, forward: boolean, count = 3): FocusDuty[] {
   if (!focus) return [];
   const index = timed.findIndex((item) => item.duty.id === focus.duty.id);
@@ -468,7 +456,7 @@ const styles = StyleSheet.create({
   heroFoot: { fontSize: 13, fontWeight: '600', marginTop: 14 },
   summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14 }, summaryValue: { fontSize: 28, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] },
   upNext: { flex: 1, minHeight: 0, gap: 2 }, upNextList: { flex: 1 }, upNextRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
-  upNextDate: { fontSize: 12, fontWeight: '700', letterSpacing: .4, width: 54 }, upNextRoute: { flex: 1, fontSize: 15, fontWeight: '600' }, upNextTime: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  upNextDate: { fontSize: 12, fontWeight: '700', letterSpacing: .4, width: 54 }, upNextRoute: { flex: 1, fontSize: 15, fontWeight: '600' }, upNextTimeBlock: { minWidth: 72, alignItems: 'flex-end' }, upNextTimeLabel: { fontSize: 8, lineHeight: 10, fontWeight: '700', letterSpacing: .45, marginBottom: 1 }, upNextTime: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
   primaryButton: { height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }, actionText: { color: '#fff', fontWeight: '700' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, titleActions: { flexDirection: 'row', gap: 7 }, compactButton: { height: 38, minWidth: 72, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 }, compactText: { fontWeight: '700', fontSize: 12 },
   monthNav: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, monthNavText: { fontSize: 12, fontWeight: '600' }, error: { fontSize: 12 },
@@ -476,6 +464,6 @@ const styles = StyleSheet.create({
   infoCard: { borderWidth: 1, borderRadius: 20, padding: 14, gap: 3 }, cardTitle: { fontSize: 15, fontWeight: '700' }, settingsCard: { minHeight: 68, borderWidth: 1, borderRadius: 20, padding: 14, flexDirection: 'row', alignItems: 'center' }, chevron: { fontSize: 30 }, secondaryButton: { height: 48, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, secondaryText: { fontWeight: '600' },
   depthSurface: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 24, elevation: 5 },
   tabBar: { height: 68, marginTop: 8, marginBottom: 4, borderWidth: 1, borderRadius: 22, flexDirection: 'row' }, tabSelection: { position: 'absolute', left: 4, top: 4, bottom: 4, borderRadius: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 2 }, tabItem: { flex: 1, zIndex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabIconWrap: { minWidth: 35, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, tabIcon: { textAlign: 'center' }, tabText: { fontSize: 11, fontWeight: '600' },
-  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end' }, flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderTopWidth: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 18, paddingBottom: 12, overflow: 'hidden' }, flightSheetContent: { minHeight: 0, flexShrink: 1 }, sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }, sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 }, sheetClose: { width: 44, height: 44, borderWidth: 1, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }, sheetCloseText: { fontSize: 27 }, swipeHint: { fontSize: 10, marginTop: 7 }, flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 7 }, crewScroll: { minHeight: 0, flexShrink: 1 }, crewList: { paddingBottom: 12 }, crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' }, avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, avatarText: { fontSize: 12, fontWeight: '800' }, crewName: { fontSize: 14, fontWeight: '600' },
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end' }, flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderTopWidth: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 18, paddingBottom: 12, overflow: 'hidden' }, flightSheetContent: { minHeight: 0, flexShrink: 1 }, sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }, sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 }, swipeHint: { fontSize: 10, marginTop: 7 }, flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 7 }, crewScroll: { minHeight: 0, flexShrink: 1 }, crewList: { paddingBottom: 12 }, crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' }, avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, avatarText: { fontSize: 12, fontWeight: '800' }, crewName: { fontSize: 14, fontWeight: '600' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.46)', alignItems: 'center', justifyContent: 'center', padding: 20 }, unlockCard: { width: '100%', maxWidth: 390, borderWidth: 1, borderRadius: 26, padding: 20 }, unlockTitle: { fontSize: 26, fontWeight: '700', marginTop: 7 }, codeInput: { height: 54, borderWidth: 1, borderRadius: 15, marginTop: 18, paddingHorizontal: 16, fontSize: 22, letterSpacing: 5, textAlign: 'center' }, codeHint: { fontSize: 11, marginTop: 6 }, actions: { flexDirection: 'row', gap: 9, marginTop: 18 }, action: { flex: 1, height: 46, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
 });
