@@ -28,23 +28,46 @@ export const PER_DIEM_RULES: Record<PerDiemRegion, PerDiemRule> = {
   EU_UK: { region: 'EU_UK', minimumStationMinutes: 2 * 60, usdRate: 60 },
 };
 
-// Keep this conservative. A station that is not clearly covered by the confirmed policy is left
-// unclassified rather than silently charging the wrong rate. Turkey is explicitly Asia per user rule.
+// Keep this conservative. Only stations that fit a confirmed rate bucket without interpretation are
+// classified automatically. Turkey is explicitly Asia per the confirmed user rule. Greece is EU;
+// Kyrgyzstan is Asia. Anything whose contractual bucket is not confirmed remains UNCLASSIFIED.
 const KZ_STATIONS = new Set([
   'AKX', 'ALA', 'BSZ', 'CIT', 'DMB', 'GUW', 'KGF', 'KSN', 'KZO', 'NQZ', 'PLX', 'PWQ', 'SCO', 'UKK', 'URA',
 ]);
-const EU_UK_STATIONS = new Set(['AMS', 'FRA', 'LHR']);
+const EU_UK_STATIONS = new Set(['AMS', 'FRA', 'HER', 'LHR']);
 const ASIA_STATIONS = new Set([
-  'AUH', 'AYT', 'BJV', 'BKK', 'BOM', 'CAN', 'CMB', 'CTU', 'CXR', 'DAD', 'DEL', 'DOH', 'DXB', 'DYU', 'GOI',
-  'HKT', 'ICN', 'IST', 'JED', 'MED', 'MLE', 'PEK', 'PQC', 'SYX', 'TAS', 'TLV', 'UBN', 'URC',
+  'AUH', 'AYT', 'BJV', 'BKK', 'BOM', 'CAN', 'CMB', 'CTU', 'CXR', 'DAD', 'DEL', 'DOH', 'DXB', 'DYU', 'FRU', 'GOI',
+  'HKT', 'ICN', 'IST', 'JED', 'MED', 'MLE', 'OSS', 'PEK', 'PQC', 'SYX', 'TAS', 'TLV', 'UBN', 'URC',
 ]);
 
+/**
+ * Stations present in the current CrewPay route set whose per-diem bucket must not be guessed.
+ * Keeping the reasons in code makes future policy updates deliberate rather than geographical
+ * assumptions silently changing pay.
+ */
+export const UNCONFIRMED_PER_DIEM_STATIONS: Readonly<Record<string, string>> = {
+  BUS: 'Georgia/Caucasus rate bucket not confirmed',
+  GYD: 'Azerbaijan/Caucasus rate bucket not confirmed',
+  TBS: 'Georgia/Caucasus rate bucket not confirmed',
+  DME: 'Russia rate bucket not confirmed',
+  LED: 'Russia rate bucket not confirmed',
+  OVB: 'Russia rate bucket not confirmed',
+  KBP: 'Ukraine is outside the confirmed EU/UK bucket',
+  TGD: 'Montenegro is outside the confirmed EU/UK bucket',
+  HRG: 'Egypt/Africa rate bucket not confirmed',
+  SSH: 'Egypt/Africa rate bucket not confirmed',
+};
+
 export function classifyPerDiemStation(station: string): PerDiemStationRegion {
-  const code = station.toUpperCase();
+  const code = station.trim().toUpperCase();
   if (KZ_STATIONS.has(code)) return 'KZ';
   if (EU_UK_STATIONS.has(code)) return 'EU_UK';
   if (ASIA_STATIONS.has(code)) return 'ASIA';
   return 'UNCLASSIFIED';
+}
+
+export function getUnconfirmedPerDiemReason(station: string): string | undefined {
+  return UNCONFIRMED_PER_DIEM_STATIONS[station.trim().toUpperCase()];
 }
 
 export function isLayoverEligible(region: PerDiemRegion, stationMinutes: number) {
