@@ -4,6 +4,7 @@ import type { StationStay } from '../src/domain/layovers';
 import type { ParsedAirAstanaRoster } from '../src/import/parseAirAstanaRoster';
 import { extractCrewRecords } from '../src/import/crew';
 import { stationLocalDateTimeMs } from '../src/domain/stationTime';
+import { clearLovedMode, loadLovedMode, saveLovedMode } from '../src/storage/lovedModeStorage';
 import type { ExtractedPage, TextItem } from '../src/import/types';
 
 const MRP_2026 = 4325;
@@ -12,6 +13,21 @@ function equal<T>(actual: T, expected: T, label?: string): void {
   if (Object.is(actual, expected)) return;
   throw new Error(`${label ?? 'assertion failed'}: expected ${String(expected)}, got ${String(actual)}`);
 }
+
+const modeValues = new Map<string, string>();
+Object.defineProperty(globalThis, 'localStorage', {
+  configurable: true,
+  value: {
+    getItem: (key: string) => modeValues.get(key) ?? null,
+    setItem: (key: string, value: string) => modeValues.set(key, value),
+    removeItem: (key: string) => modeValues.delete(key),
+  },
+});
+equal(loadLovedMode(), false, 'special mode starts disabled on this device');
+saveLovedMode();
+equal(loadLovedMode(), true, 'special mode survives an app relaunch on this device');
+clearLovedMode();
+equal(loadLovedMode(), false, 'turning special mode off clears its local activation');
 
 function stay(station: string, arrivalLocal: string, departureLocal: string, durationMinutes: number): StationStay {
   return {
