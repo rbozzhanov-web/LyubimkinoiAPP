@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
 import { calculateRosterPay, formatKzt, payReadiness, type PayMonthOverrides, type PayProfile } from '@/src/domain/pay';
+import { CREW_PAY_NORM_STATED_TO } from '@/src/domain/crewPayNorm';
 import { resolveMrp, type MrpSnapshot } from '@/src/domain/mrp';
 import { loadPayMonth, loadPayProfile, savePayMonth, savePayProfile } from '@/src/storage/payStorage';
 
@@ -13,7 +14,9 @@ type Draft = {
   monthlyTransport: string;
   paidHours: string;
   deadheadHours: string;
-  sickDailyRate: string;
+  sickEarnings12m: string;
+  sickWorkedHours12m: string;
+  sickMissedHours: string;
 };
 
 export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster; palette: Palette }) {
@@ -67,23 +70,14 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
     const nextMonth: PayMonthOverrides = {
       paidHours: optionalNumberFrom(draft.paidHours),
       deadheadHours: optionalNumberFrom(draft.deadheadHours),
-      sickDailyRate: optionalNumberFrom(draft.sickDailyRate),
+      sickEarnings12m: optionalNumberFrom(draft.sickEarnings12m),
+      sickWorkedHours12m: optionalNumberFrom(draft.sickWorkedHours12m),
+      sickMissedHours: optionalNumberFrom(draft.sickMissedHours),
     };
 
-    if (!(nextProfile.hourlyRate > 0) || !(nextProfile.monthlySalary > 0) || !(nextProfile.monthlyTransport >= 0)) {
-      setError('Fill hourly rate, monthly salary and transport allowance.');
-      return;
-    }
-    if (!(nextMonth.paidHours && nextMonth.paidHours > 0)) {
-      setError('Enter payroll / CrewPay Norm hours for this month.');
-      return;
-    }
-    if (deadheadSectors > 0 && !(typeof nextMonth.deadheadHours === 'number' && nextMonth.deadheadHours >= 0)) {
-      setError('This roster has deadhead. Enter its paid hours.');
-      return;
-    }
-    if (sickDays > 0 && !(typeof nextMonth.sickDailyRate === 'number' && nextMonth.sickDailyRate >= 0)) {
-      setError('This roster has sick days. Enter the sick daily rate for this month.');
+    const nextReadiness = payReadiness(roster, nextProfile, nextMonth);
+    if (!nextReadiness.ready) {
+      setError(`Needs: ${nextReadiness.missing.join(', ')}.`);
       return;
     }
 
@@ -110,7 +104,7 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
         <Text style={[styles.openGlyph, { color: palette.accent }]}>›</Text>
       </View>
       {calculation
-        ? <Text style={[styles.meta, { color: palette.muted }]}>Gross {formatKzt(calculation.gross)} · {calculation.paidHours.toFixed(2)} paid h · {calculation.operatingSectors} sectors</Text>
+        ? <Text style={[styles.meta, { color: palette.muted }]}>Gross {formatKzt(calculation.gross)} · {calculation.paidHours.toFixed(2)} paid h ({calculation.paidHoursSource === 'crewPayNorm' ? `Norm ${calculation.crewPayNormVersion}` : 'manual'}) · {calculation.operatingSectors} sectors</Text>
         : <Text style={[styles.meta, { color: palette.muted }]}>{readiness.missing.length ? `Needs: ${readiness.missing.join(', ')}` : 'Waiting for annual MRP.'}</Text>}
     </Pressable>
 
@@ -131,11 +125,29 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
             <Field label="Full monthly salary · ₸" value={draft.monthlySalary} onChange={(value) => setDraft((old) => ({ ...old, monthlySalary: value }))} palette={palette} />
             <Field label="Full monthly transport · ₸" value={draft.monthlyTransport} onChange={(value) => setDraft((old) => ({ ...old, monthlyTransport: value }))} palette={palette} />
 
-            <Text style={[styles.section, { color: palette.text }]}>This month</Text>
-            <Field label="Payroll / CrewPay Norm hours" value={draft.paidHours} onChange={(value) => setDraft((old) => ({ ...old, paidHours: value }))} palette={palette} />
-            <Text style={[styles.hint, { color: palette.muted }]}>Roster reports {formatRosterBlock(roster.totals.blockMinutes)} actual block. Payroll hours can differ, so KhaVair does not silently substitute this value.</Text>
-            {deadheadSectors > 0 && <Field label={`Deadhead paid hours · ${deadheadSectors} sector${deadheadSectors === 1 ? '' : 's'} detected`} value={draft.deadheadHours} onChange={(value) => setDraft((old) => ({ ...old, deadheadHours: value }))} palette={palette} />}
-            {sickDays > 0 && <Field label={`Sick daily rate · ${sickDays} day${sickDays === 1 ? '' : 's'} detected`} value={draft.sickDailyRate} onChange={(value) => setDraft((old) => ({ ...old, sickDailyRate: value }))} palette={palette} />}
+            <Text style={[styles.section, { color: palette.text }]}>CrewPay hours</Text>
+            {readiness.autoPaidHours !== undefined
+              ? <View style={[styles.facts, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+                  <Text style={[styles.factTitle, { color: palette.text }]}>CrewPay Norm {readiness.crewPayNormVersion} · {readiness.autoPaidHours.toFixed(2)} h</Text>
+                  <Text style={[styles.meta, { color: palette.muted }]}>Calculated from {operatingSectors} operating sectors. DHC is separate.</Text>
+                  {readiness.crewPayNormAfterStatedPeriod && <Text style={[styles.meta, { color: palette.muted }]}>The document’s stated period ended {CREW_PAY_NORM_STATED_TO}. Version {readiness.crewPayNormVersion} is still used because it is the latest published version and no successor has been issued.</Text>}
+                </View>
+              : <Text style={[styles.hint, { color: palette.muted }]}>Automatic CrewPay is incomplete because the table does not contain: {readiness.crewPayNormMissingRoutes.join(', ') || 'unknown route'}.</Text>}
+            <Field label="Paid hours override · optional" value={draft.paidHours} onChange={(value) => setDraft((old) => ({ ...old, paidHours: value }))} palette={palette} />
+            <Text style={[styles.hint, { color: palette.muted }]}>Leave blank to use CrewPay Norm automatically. Roster total is {formatRosterBlock(roster.totals.blockMinutes)} and is not substituted for payroll norm.</Text>
+
+            {deadheadSectors > 0 && <>
+              <Text style={[styles.section, { color: palette.text }]}>Deadhead</Text>
+              <Field label={`Deadhead paid hours · ${deadheadSectors} sector${deadheadSectors === 1 ? '' : 's'} detected`} value={draft.deadheadHours} onChange={(value) => setDraft((old) => ({ ...old, deadheadHours: value }))} palette={palette} />
+            </>}
+
+            {sickDays > 0 && <>
+              <Text style={[styles.section, { color: palette.text }]}>Sick leave · Kazakhstan rules</Text>
+              <Text style={[styles.hint, { color: palette.muted }]}>For summarized working-time accounting: average hourly earnings from the 12 calendar months before sickness × scheduled working hours missed because of sickness. Ordinary monthly benefit is capped at 25 MRP.</Text>
+              <Field label="Included earnings in preceding 12 months · ₸" value={draft.sickEarnings12m} onChange={(value) => setDraft((old) => ({ ...old, sickEarnings12m: value }))} palette={palette} />
+              <Field label="Worked hours in the same 12 months" value={draft.sickWorkedHours12m} onChange={(value) => setDraft((old) => ({ ...old, sickWorkedHours12m: value }))} palette={palette} />
+              <Field label={`Scheduled hours missed · ${sickDays} SICK day${sickDays === 1 ? '' : 's'}`} value={draft.sickMissedHours} onChange={(value) => setDraft((old) => ({ ...old, sickMissedHours: value }))} palette={palette} />
+            </>}
 
             <View style={[styles.facts, { backgroundColor: palette.surface, borderColor: palette.line }]}>
               <Text style={[styles.factTitle, { color: palette.text }]}>From roster automatically</Text>
@@ -143,7 +155,7 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
               <Text style={[styles.meta, { color: palette.muted }]}>Night pay = ½ paid hours × 0.5 rate. Sector bands: first 15 free, then ×3 / ×4 / ×5 / ×6. DHC = ×0.5.</Text>
             </View>
 
-            {mrp && <Text style={[styles.hint, { color: palette.muted }]}>IPN standard deduction: 30 MRP = {formatKzt(mrp.valueKzt * 30)} · MRP {mrp.valueKzt.toLocaleString('ru-RU')} ₸.</Text>}
+            {mrp && <Text style={[styles.hint, { color: palette.muted }]}>MRP {mrp.valueKzt.toLocaleString('ru-RU')} ₸ · IPN standard deduction 30 MRP = {formatKzt(mrp.valueKzt * 30)} · ordinary sick-leave cap 25 MRP = {formatKzt(mrp.valueKzt * 25)}.</Text>}
             {error && <Text style={[styles.error, { color: palette.rose }]}>{error}</Text>}
 
             {calculation && <View style={[styles.breakdown, { borderColor: palette.line }]}>
@@ -155,7 +167,7 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
               <Line label="Night" value={calculation.nightLine.amount} palette={palette} />
               <Line label="Sector supplements" value={calculation.sectorLines.reduce((sum, line) => sum + line.amount, 0)} palette={palette} />
               {calculation.deadheadLine.amount > 0 && <Line label="Deadhead" value={calculation.deadheadLine.amount} palette={palette} />}
-              {calculation.sickLine.amount > 0 && <Line label="Sick leave" value={calculation.sickLine.amount} palette={palette} />}
+              {calculation.sickLine.amount > 0 && <Line label={calculation.sickCapped ? 'Sick leave · capped at 25 MRP' : 'Sick leave'} value={calculation.sickLine.amount} palette={palette} />}
               <Line label="Gross" value={calculation.gross} strong palette={palette} />
               <Line label="OSMS" value={-calculation.osms} palette={palette} />
               <Line label="OPV" value={-calculation.opv} palette={palette} />
@@ -189,7 +201,9 @@ function Line({ label, value, strong, palette }: { label: string; value: number;
   return <View style={styles.line}><Text style={[styles.lineText, strong && styles.strong, { color: palette.text }]}>{label}</Text><Text style={[styles.lineText, strong && styles.strong, { color: palette.text }]}>{value < 0 ? '−' : ''}{formatKzt(Math.abs(value))}</Text></View>;
 }
 
-function emptyDraft(): Draft { return { hourlyRate: '', monthlySalary: '', monthlyTransport: '', paidHours: '', deadheadHours: '', sickDailyRate: '' }; }
+function emptyDraft(): Draft {
+  return { hourlyRate: '', monthlySalary: '', monthlyTransport: '', paidHours: '', deadheadHours: '', sickEarnings12m: '', sickWorkedHours12m: '', sickMissedHours: '' };
+}
 function draftFrom(profile?: Partial<PayProfile>, month?: PayMonthOverrides): Draft {
   return {
     hourlyRate: inputValue(profile?.hourlyRate),
@@ -197,7 +211,9 @@ function draftFrom(profile?: Partial<PayProfile>, month?: PayMonthOverrides): Dr
     monthlyTransport: inputValue(profile?.monthlyTransport),
     paidHours: inputValue(month?.paidHours),
     deadheadHours: inputValue(month?.deadheadHours),
-    sickDailyRate: inputValue(month?.sickDailyRate),
+    sickEarnings12m: inputValue(month?.sickEarnings12m),
+    sickWorkedHours12m: inputValue(month?.sickWorkedHours12m),
+    sickMissedHours: inputValue(month?.sickMissedHours),
   };
 }
 function inputValue(value: number | undefined): string { return typeof value === 'number' && Number.isFinite(value) ? String(value) : ''; }
