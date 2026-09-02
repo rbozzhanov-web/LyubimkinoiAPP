@@ -12,6 +12,8 @@ export interface PayMonthOverrides {
   paidHours?: number;
   /** Positioning/deadhead paid hours as a true decimal. */
   deadheadHours?: number;
+  /** Known factual sick-pay amount from an issued payslip; used only when explicitly provided. */
+  sickAmountOverride?: number;
   /** Earnings included in the statutory average-pay calculation over the preceding 12 months. */
   sickEarnings12m?: number;
   /** Working hours in the same statutory calculation period. */
@@ -42,6 +44,7 @@ export interface PayCalculation {
   sickAverageHourly?: number;
   sickMonthlyCap: number;
   sickCapped: boolean;
+  sickSource: 'statutory-average' | 'known-payslip' | 'none';
   salaryLine: PayLine;
   transportLine: PayLine;
   sickLine: PayLine;
@@ -68,8 +71,6 @@ export interface PayReadiness {
   crewPayNormMissingRoutes: string[];
 }
 
-// Structural payroll rules from the supplied cabin-crew calculation/payslip and current RK rules.
-// Personal amounts remain local on the device and are not committed to the repository.
 export const PAYROLL_RULES = {
   hourBands: [
     { upTo: 60, effectiveMultiplier: 1 },
@@ -90,7 +91,6 @@ export const PAYROLL_RULES = {
   opvRate: 0.1,
   ipnRate: 0.1,
   ipnDeductionMrpMultiplier: 30,
-  /** Ordinary temporary-incapacity benefit may not exceed 25 MRP for one month. */
   sickMonthlyCapMrpMultiplier: 25,
 } as const;
 
@@ -112,7 +112,8 @@ export function payReadiness(
   if (deadheadSectors > 0 && !nonNegative(overrides?.deadheadHours)) missing.push('deadhead hours');
 
   const sickDays = (roster.absences ?? []).filter((absence) => absence.code === 'SICK').length;
-  if (sickDays > 0) {
+  const hasKnownSickAmount = nonNegative(overrides?.sickAmountOverride);
+  if (sickDays > 0 && !hasKnownSickAmount) {
     if (!positive(overrides?.sickEarnings12m)) missing.push('12-month earnings for sick leave');
     if (!positive(overrides?.sickWorkedHours12m)) missing.push('12-month worked hours for sick leave');
     if (!positive(overrides?.sickMissedHours)) missing.push('scheduled hours missed on sick leave');
@@ -160,20 +161,20 @@ export function calculateRosterPay(
     amount: round2(profile.monthlyTransport * attendanceShare),
   };
 
-  // RK temporary-incapacity rules: average hourly earnings are based on the 12 calendar months
-  // preceding the event; for summarized working-time accounting the benefit is average hourly
-  // earnings multiplied by scheduled hours missed because of sickness. Ordinary benefit is capped
-  // at 25 MRP for a payroll month. Special 100%-of-average categories are intentionally not guessed.
-  const sickAverageHourly = sickDays > 0
+  const sickMonthlyCap = round2(mrpKzt * PAYROLL_RULES.sickMonthlyCapMrpMultiplier);
+  const knownSickAmount = nonNegative(overrides.sickAmountOverride) ? overrides.sickAmountOverride : undefined;
+  const sickAverageHourly = sickDays > 0 && knownSickAmount === undefined
     ? round2((overrides.sickEarnings12m ?? 0) / (overrides.sickWorkedHours12m ?? 1))
     : undefined;
-  const sickRaw = sickDays > 0 ? (sickAverageHourly ?? 0) * (overrides.sickMissedHours ?? 0) : 0;
-  const sickMonthlyCap = round2(mrpKzt * PAYROLL_RULES.sickMonthlyCapMrpMultiplier);
-  const sickAmount = round2(Math.min(sickRaw, sickMonthlyCap));
+  const sickRaw = sickDays === 0
+    ? 0
+    : knownSickAmount ?? (sickAverageHourly ?? 0) * (overrides.sickMissedHours ?? 0);
+  const sickAmount = knownSickAmount === undefined ? round2(Math.min(sickRaw, sickMonthlyCap)) : round2(sickRaw);
+  const sickSource: PayCalculation['sickSource'] = sickDays === 0 ? 'none' : knownSickAmount === undefined ? 'statutory-average' : 'known-payslip';
   const sickLine: PayLine = {
     label: 'Sick leave',
-    units: round2(overrides.sickMissedHours ?? 0),
-    multiplier: sickAverageHourly ?? 0,
+    units: knownSickAmount === undefined ? round2(overrides.sickMissedHours ?? 0) : sickDays,
+    multiplier: knownSickAmount === undefined ? sickAverageHourly ?? 0 : sickDays > 0 ? round2(knownSickAmount / sickDays) : 0,
     amount: sickAmount,
   };
 
@@ -185,14 +186,8 @@ export function calculateRosterPay(
   const hours60to80 = Math.min(Math.max(paidHours - 60, 0), 20);
   const hoursOver80 = Math.max(paidHours - 80, 0);
   const hourSurchargeLines: PayLine[] = [
-    {
-      label: '60–80 h top-up', units: round2(hours60to80), multiplier: 1,
-      amount: round0(hours60to80 * rate),
-    },
-    {
-      label: 'Over 80 h top-up', units: round2(hoursOver80), multiplier: 1.5,
-      amount: round0(hoursOver80 * rate * 1.5),
-    },
+    { label: '60–80 h top-up', units: round2(hours60to80), multiplier: 1, amount: round0(hours60to80 * rate) },
+    { label: 'Over 80 h top-up', units: round2(hoursOver80), multiplier: 1.5, amount: round0(hoursOver80 * rate * 1.5) },
   ];
 
   const nightHours = paidHours * PAYROLL_RULES.nightHoursShare;
@@ -233,7 +228,7 @@ export function calculateRosterPay(
     paidDays, daysInMonth, sickDays, unfitDays, operatingSectors, deadheadSectors,
     paidHours, paidHoursSource, crewPayNormVersion: readiness.crewPayNormVersion,
     crewPayNormAfterStatedPeriod: readiness.crewPayNormAfterStatedPeriod, nightHours,
-    sickAverageHourly, sickMonthlyCap, sickCapped: sickRaw > sickMonthlyCap,
+    sickAverageHourly, sickMonthlyCap, sickCapped: knownSickAmount === undefined && sickRaw > sickMonthlyCap, sickSource,
     salaryLine, transportLine, sickLine, hourBaseLine, hourSurchargeLines, nightLine,
     sectorLines, deadheadLine, gross, osms, opv, ipnStandardDeduction, ipn,
     totalDeductions, net: round2(gross - totalDeductions),
