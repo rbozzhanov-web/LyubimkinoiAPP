@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react';
 import {
   FlatList,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useColorScheme,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { demoDuty } from '@/src/data/demoRoster';
+import { verifyLovedModeCode } from '@/src/domain/lovedMode';
 
 type Tab = 'Home' | 'Roster' | 'Money' | 'More';
 
@@ -19,6 +22,9 @@ export default function IndexScreen() {
   const [tab, setTab] = useState<Tab>('Home');
   const [lovedMode, setLovedMode] = useState(false);
   const [crewOpen, setCrewOpen] = useState(false);
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  const [unlockCode, setUnlockCode] = useState('');
+  const [unlockError, setUnlockError] = useState(false);
   const dark = systemScheme === 'dark';
 
   const palette = useMemo(() => ({
@@ -28,11 +34,34 @@ export default function IndexScreen() {
     text: dark ? '#F7F4EF' : '#171714',
     muted: dark ? '#AAA49A' : '#747067',
     line: dark ? '#302E29' : '#E7E1D8',
-    accent: lovedMode ? '#D97B6C' : (dark ? '#C7BDAE' : '#2F3934'),
-    accentSoft: lovedMode ? (dark ? '#34221F' : '#F7E4DE') : (dark ? '#222925' : '#E6ECE8'),
+    accent: lovedMode ? '#D98B74' : (dark ? '#C7BDAE' : '#2F3934'),
+    accentSoft: lovedMode ? (dark ? '#34221F' : '#F6E3DC') : (dark ? '#222925' : '#E6ECE8'),
+    rose: lovedMode ? '#B96A73' : (dark ? '#C7BDAE' : '#2F3934'),
+    aqua: lovedMode ? '#7CC8D6' : (dark ? '#AAA49A' : '#747067'),
   }), [dark, lovedMode]);
 
   const sector = demoDuty.sectors[0];
+
+  const requestLovedMode = () => {
+    if (lovedMode) {
+      setLovedMode(false);
+      return;
+    }
+    setUnlockCode('');
+    setUnlockError(false);
+    setUnlockOpen(true);
+  };
+
+  const submitLovedModeCode = () => {
+    if (!verifyLovedModeCode(unlockCode)) {
+      setUnlockError(true);
+      return;
+    }
+    setLovedMode(true);
+    setUnlockOpen(false);
+    setUnlockCode('');
+    setUnlockError(false);
+  };
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]} edges={['top', 'bottom']}>
@@ -44,8 +73,8 @@ export default function IndexScreen() {
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Toggle Loved One mode"
-            onPress={() => setLovedMode((v) => !v)}
+            accessibilityLabel={lovedMode ? 'Turn off Loved One mode' : 'Unlock Loved One mode'}
+            onPress={requestLovedMode}
             style={[styles.modeButton, { backgroundColor: palette.surface }]}
           >
             <Text style={styles.modeGlyph}>{lovedMode ? '🌹' : '♡'}</Text>
@@ -79,17 +108,25 @@ export default function IndexScreen() {
                 </Pressable>
                 {crewOpen && (
                   <View style={styles.crewPanel}>
-                    {sector.crew.map((member) => (
-                      <View key={member.id} style={[styles.crewRow, { borderTopColor: palette.line }]}>
-                        <View style={[styles.avatar, { backgroundColor: palette.accentSoft }]}>
-                          <Text style={[styles.avatarText, { color: palette.accent }]}>{member.name.slice(0, 1)}</Text>
+                    {sector.crew.map((member, index) => {
+                      const avatarTone = lovedMode
+                        ? [palette.accentSoft, '#E6F6F8', '#E7EEE6'][index % 3]
+                        : palette.accentSoft;
+                      const avatarInk = lovedMode
+                        ? [palette.rose, palette.aqua, '#789176'][index % 3]
+                        : palette.accent;
+                      return (
+                        <View key={member.id} style={[styles.crewRow, { borderTopColor: palette.line }]}>
+                          <View style={[styles.avatar, { backgroundColor: avatarTone }]}>
+                            <Text style={[styles.avatarText, { color: avatarInk }]}>{member.name.slice(0, 1)}</Text>
+                          </View>
+                          <View style={styles.crewCopy}>
+                            <Text style={[styles.crewName, { color: palette.text }]}>{member.name}</Text>
+                            <Text style={[styles.crewRole, { color: palette.muted }]}>{member.position ?? member.role}</Text>
+                          </View>
                         </View>
-                        <View style={styles.crewCopy}>
-                          <Text style={[styles.crewName, { color: palette.text }]}>{member.name}</Text>
-                          <Text style={[styles.crewRole, { color: palette.muted }]}>{member.position ?? member.role}</Text>
-                        </View>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
                 )}
               </View>
@@ -145,9 +182,9 @@ export default function IndexScreen() {
               <Text style={[styles.sectionTitle, { color: palette.text }]}>More</Text>
               <View style={[styles.hero, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
                 <Text style={[styles.privacyTitle, { color: palette.text }]}>Loved One Mode {lovedMode ? '🌹' : ''}</Text>
-                <Text style={[styles.privacyCopy, { color: palette.muted }]}>A warm accent, kept intentionally subtle.</Text>
-                <Pressable onPress={() => setLovedMode((v) => !v)} style={[styles.actionButton, { backgroundColor: palette.accent }]}> 
-                  <Text style={styles.actionText}>{lovedMode ? 'Use standard theme' : 'Turn on 🍑 mode'}</Text>
+                <Text style={[styles.privacyCopy, { color: palette.muted }]}>A private warm palette inspired by a favorite photo.</Text>
+                <Pressable onPress={requestLovedMode} style={[styles.actionButton, { backgroundColor: palette.accent }]}>
+                  <Text style={styles.actionText}>{lovedMode ? 'Use standard theme' : 'Unlock special theme'}</Text>
                 </Pressable>
               </View>
             </View>
@@ -166,6 +203,58 @@ export default function IndexScreen() {
           })}
         </View>
       </View>
+
+      <Modal visible={unlockOpen} transparent animationType="fade" onRequestClose={() => setUnlockOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.unlockCard, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+            <Text style={[styles.unlockKicker, { color: palette.rose }]}>FOR SOMEONE SPECIAL</Text>
+            <Text style={[styles.unlockTitle, { color: palette.text }]}>Enter the code</Text>
+            <Text style={[styles.unlockCopy, { color: palette.muted }]}>A small private detail unlocks this theme.</Text>
+            <TextInput
+              autoFocus
+              value={unlockCode}
+              onChangeText={(value) => {
+                setUnlockCode(value.replace(/\D/g, '').slice(0, 7));
+                setUnlockError(false);
+              }}
+              onSubmitEditing={submitLovedModeCode}
+              keyboardType="number-pad"
+              secureTextEntry
+              maxLength={7}
+              accessibilityLabel="Loved One Mode code"
+              style={[
+                styles.codeInput,
+                {
+                  color: palette.text,
+                  backgroundColor: palette.surface,
+                  borderColor: unlockError ? palette.rose : palette.line,
+                },
+              ]}
+            />
+            <Text style={[styles.codeHint, { color: unlockError ? palette.rose : palette.muted }]}>
+              {unlockError ? 'That code did not unlock the theme.' : '7 digits'}
+            </Text>
+            <View style={styles.unlockActions}>
+              <Pressable
+                onPress={() => {
+                  setUnlockOpen(false);
+                  setUnlockCode('');
+                  setUnlockError(false);
+                }}
+                style={[styles.unlockAction, { backgroundColor: palette.surface, borderColor: palette.line }]}
+              >
+                <Text style={[styles.cancelText, { color: palette.text }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={submitLovedModeCode}
+                style={[styles.unlockAction, { backgroundColor: palette.accent, borderColor: palette.accent }]}
+              >
+                <Text style={styles.actionText}>Unlock</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -241,4 +330,14 @@ const styles = StyleSheet.create({
   tabItem: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'center', gap: 5 },
   tabDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'transparent' },
   tabText: { fontSize: 11, fontWeight: '650' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.46)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  unlockCard: { width: '100%', maxWidth: 420, borderWidth: 1, borderRadius: 26, padding: 20 },
+  unlockKicker: { fontSize: 9, fontWeight: '800', letterSpacing: 1.4 },
+  unlockTitle: { marginTop: 8, fontSize: 27, lineHeight: 32, fontWeight: '700', letterSpacing: -0.7 },
+  unlockCopy: { marginTop: 6, fontSize: 13, lineHeight: 18 },
+  codeInput: { marginTop: 18, height: 54, borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, fontSize: 22, fontWeight: '700', letterSpacing: 5, textAlign: 'center' },
+  codeHint: { marginTop: 7, minHeight: 17, fontSize: 11, textAlign: 'center' },
+  unlockActions: { marginTop: 14, flexDirection: 'row', gap: 10 },
+  unlockAction: { flex: 1, minHeight: 46, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  cancelText: { fontSize: 14, fontWeight: '700' },
 });

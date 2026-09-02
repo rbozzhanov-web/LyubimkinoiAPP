@@ -8,7 +8,8 @@ Cabin crew companion for roster, crew, flight-hours, per-diem and later pay calc
 - No application-level vertical scrolling on primary screens; long content scrolls inside bounded panels.
 - Roster and personal data are designed to remain local to the device.
 - Existing Air Astana roster parsing and night-hours logic will be adapted from `FA-Logbook` rather than reimplemented.
-- Normal mode stays professional and shareable; Loved One Mode adds restrained peach/rose accents.
+- Normal mode stays professional and shareable; Loved One Mode adds restrained peach/rose accents derived from the supplied reference photo.
+- Loved One Mode is an Easter egg: enabling it requires a local numeric code. The code itself is not stored in plaintext in the repository. This gate is intentionally not treated as a security boundary.
 
 ## Current foundation
 
