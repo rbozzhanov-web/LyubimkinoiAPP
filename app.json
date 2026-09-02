@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "KhaVair",
+    "slug": "khavair",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "khavair",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "name": "KhaVair — Cabin Crew Companion",
+      "shortName": "KhaVair",
+      "themeColor": "#F4F1EC",
+      "backgroundColor": "#F4F1EC",
+      "display": "standalone"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

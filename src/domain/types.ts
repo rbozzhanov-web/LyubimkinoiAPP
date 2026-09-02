@@ -1,0 +1,36 @@
+export type CrewRole = 'Cabin' | 'Flight deck';
+
+export type CrewMember = {
+  id: string;
+  name: string;
+  role: CrewRole;
+  position?: string;
+};
+
+export type Sector = {
+  id: string;
+  flightNumber: string;
+  departure: string;
+  arrival: string;
+  departureTime: string;
+  arrivalTime: string;
+  blockMinutes: number;
+  crew: CrewMember[];
+};
+
+export type Duty = {
+  id: string;
+  dateLabel: string;
+  reportTime: string;
+  releaseTime: string;
+  sectors: Sector[];
+  layoverStation?: string;
+};
+
+export type PerDiemRegion = 'KZ' | 'ASIA' | 'EU_UK';
+
+export type PerDiemRule = {
+  region: PerDiemRegion;
+  minimumStationMinutes: number;
+  usdRate: number | null;
+};
