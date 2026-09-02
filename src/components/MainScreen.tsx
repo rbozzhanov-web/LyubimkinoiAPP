@@ -300,7 +300,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
   const block = roster.totals.blockMinutes;
   const night = roster.totals.nightMinutes;
   const nightShare = block && night !== undefined ? Math.round((night / block) * 100) : undefined;
-  const previousFlights = timeline.filter((item) => item.releaseMs < now).sort((a, b) => b.releaseMs - a.releaseMs).slice(0, 6);
+  const neighbours = previousDuties(timeline, focus, now, 6);
 
   return <View style={styles.screen}>
     <View style={styles.dutyHead}>
@@ -340,9 +340,9 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
       {year} to date · {formatMinutes(sumReportedBlockMinutes(yearRosters))} block · {formatMinutes(sumReportedNightMinutes(yearRosters))} night · {yearRosters.length} months imported
     </Text>}
 
-    {previousFlights.length > 0 && <View style={styles.upNext}>
+    {neighbours.length > 0 && <View style={styles.upNext}>
       <Text style={[styles.label, { color: palette.muted }]}>PREVIOUS FLIGHTS</Text>
-      <FlatList data={previousFlights} keyExtractor={(item) => item.duty.id} showsVerticalScrollIndicator={false} style={styles.upNextList}
+      <FlatList data={neighbours} keyExtractor={(item) => item.duty.id} showsVerticalScrollIndicator={false} style={styles.upNextList}
         renderItem={({ item }) => <View style={[styles.upNextRow, { borderColor: palette.line }]}>
           <Text style={[styles.upNextDate, { color: palette.muted }]}>{item.duty.dateLabel}</Text>
           <Text numberOfLines={1} style={[styles.upNextRoute, { color: palette.text }]}>{routeChain(item.duty)}</Text>
@@ -542,13 +542,11 @@ function pickFocusDuty(timed: FocusDuty[], now: number): FocusDuty | undefined {
   return timed[timed.length - 1];
 }
 
-function adjacentDuties(timed: FocusDuty[], focus: FocusDuty | undefined, forward: boolean, count = 3): FocusDuty[] {
-  if (!focus) return [];
-  const index = timed.findIndex((item) => item.duty.id === focus.duty.id);
-  if (index < 0) return [];
-  return forward
-    ? timed.slice(index + 1, index + 1 + count)
-    : timed.slice(Math.max(0, index - count), index).reverse();
+function previousDuties(timed: FocusDuty[], focus: FocusDuty | undefined, now: number, count = 3): FocusDuty[] {
+  return timed
+    .filter((item) => item.releaseMs < now && item.duty.id !== focus?.duty.id)
+    .sort((a, b) => b.releaseMs - a.releaseMs)
+    .slice(0, count);
 }
 function formatCountdown(milliseconds: number): string {
   const total = Math.max(0, Math.floor(milliseconds / 1000));
