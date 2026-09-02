@@ -3,6 +3,7 @@ import { calculateRosterPay } from '../src/domain/pay';
 import type { StationStay } from '../src/domain/layovers';
 import type { ParsedAirAstanaRoster } from '../src/import/parseAirAstanaRoster';
 import { extractCrewRecords } from '../src/import/crew';
+import { stationLocalDateTimeMs } from '../src/domain/stationTime';
 import type { ExtractedPage, TextItem } from '../src/import/types';
 
 const MRP_2026 = 4325;
@@ -108,5 +109,54 @@ equal(pay.nightLine.amount, 21250, 'night supplement');
 equal(pay.sectorLines.reduce((sum, line) => sum + line.amount, 0), 16000, 'sector supplement');
 equal(pay.gross, 259750, 'gross');
 equal(pay.net, 218697, 'net');
+
+// Leave days come out of the salary and transport month. Four issued payslips fix this
+// rule: rest codes (OFF, DOFF, ROFF, BOFF, AVLB) stay paid, while SICK, UFF, VAC and CHLD
+// each remove a day. A 30-day month with 7 vacation days pays 23.
+const leaveRoster: ParsedAirAstanaRoster = {
+  ...roster,
+  period: { start: '2026-06-01', end: '2026-06-30' },
+  absences: [
+    ...Array.from({ length: 7 }, (_, index) => ({ code: 'VAC' as const, date: `2026-06-0${index + 1}` })),
+  ],
+};
+const leavePay = calculateRosterPay(
+  leaveRoster,
+  { hourlyRate: 3100, monthlySalary: 164317, monthlyTransport: 78000 },
+  { paidHours: 74.88, vacationAmountOverride: 200000 },
+  MRP_2026,
+);
+equal(leavePay.paidDays, 23, 'seven vacation days leave 23 paid days');
+equal(leavePay.vacationDays, 7, 'vacation days counted');
+equal(leavePay.salaryLine.amount, 125976, 'salary is prorated over paid days');
+equal(leavePay.transportLine.amount, 59800, 'transport is prorated the same way');
+equal(leavePay.vacationLine.amount, 200000, 'vacation pay is carried as given');
+
+const childLeave = calculateRosterPay(
+  { ...roster, period: { start: '2026-05-01', end: '2026-05-31' },
+    absences: [...Array.from({ length: 7 }, (_, i) => ({ code: 'CHLD' as const, date: `2026-05-0${i + 1}` })), { code: 'VAC' as const, date: '2026-05-31' }] },
+  { hourlyRate: 3100, monthlySalary: 164317, monthlyTransport: 78000 },
+  { paidHours: 67.94, vacationAmountOverride: 0, holidayHours: 4.98, officialDayOffHours: 7.1 },
+  MRP_2026,
+);
+equal(childLeave.paidDays, 23, 'child-care days remove a day each');
+equal(childLeave.salaryLine.amount, 121913, 'salary over 23 of 31 days');
+// A holiday hour carries one extra rate; an official day off carries half.
+equal(childLeave.holidayLine.amount, 15438, 'public holiday hours');
+equal(childLeave.officialDayOffLine.amount, 11005, 'official day off hours');
+
+// Station clocks must not depend on the browser's timezone database. WebKit still ships
+// pre-2024 tzdata that puts Almaty on UTC+6, which would make every Kazakhstan duty an
+// hour long or short.
+const alaNoon = stationLocalDateTimeMs('ALA', '2026-08-28', '12:00');
+equal(alaNoon, Date.UTC(2026, 7, 28, 7, 0), 'ALA is UTC+5 after the 2024 unification');
+equal(stationLocalDateTimeMs('ALA', '2023-08-28', '12:00'), Date.UTC(2023, 7, 28, 6, 0), 'ALA was UTC+6 before it');
+equal(stationLocalDateTimeMs('KSN', '2026-08-28', '12:00'), Date.UTC(2026, 7, 28, 7, 0), 'Qostanay moved with Almaty');
+equal(stationLocalDateTimeMs('SCO', '2026-08-28', '12:00'), Date.UTC(2026, 7, 28, 7, 0), 'Aqtau was already UTC+5');
+
+// The duty that exposed it: ICN 10:10 report to ALA 15:07 release is 8h57, not 7h57.
+const icnReport = stationLocalDateTimeMs('ICN', '2026-08-28', '10:10');
+const alaRelease = stationLocalDateTimeMs('ALA', '2026-08-28', '15:07');
+equal((alaRelease! - icnReport!) / 60000, 537, 'ICN->ALA duty spans 8:57');
 
 console.log('Domain smoke tests passed');

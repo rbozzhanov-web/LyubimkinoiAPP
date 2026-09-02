@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
 import { calculateRosterPay, formatKzt, payReadiness, type PayCalculation, type PayMonthOverrides, type PayProfile } from '@/src/domain/pay';
 import { CREW_PAY_NORM_STATED_TO } from '@/src/domain/crewPayNorm';
@@ -70,6 +70,21 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
         : <Text style={[styles.meta, { color: palette.muted }]}>{readiness.missing.length ? 'More → Salary settings' : 'Waiting for annual MRP.'}</Text>}
     </Pressable>
 
+    {perDiem && <View style={styles.inline}>
+      <Text style={[styles.label, { color: palette.muted }]}>QUALIFYING LAYOVERS</Text>
+      {paidLayovers.length
+        ? <FlatList data={paidLayovers} style={styles.inlineList} showsVerticalScrollIndicator={false}
+            keyExtractor={(item) => `${item.stay.arrivalLocal}-${item.stay.station}`}
+            renderItem={({ item }) => <View style={[styles.inlineRow, { borderColor: palette.line }]}>
+              <View style={styles.grow}>
+                <Text style={[styles.inlineStation, { color: palette.text }]}>{item.stay.station}</Text>
+                <Text style={[styles.meta, { color: palette.muted }]}>{shortDate(item.stay.arrivalLocal)} · {formatStayDuration(item.stay.durationMinutes)}</Text>
+              </View>
+              <Text style={[styles.inlineAmount, { color: palette.accent }]}>{perDiemItemAmount(item)}</Text>
+            </View>} />
+        : <Text style={[styles.meta, { color: palette.muted }]}>No layover this month met its minimum ground time.</Text>}
+    </View>}
+
     <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
       <View style={styles.backdrop}>
         <SwipeSurface style={[styles.sheet, { backgroundColor: palette.background, borderColor: palette.line }]} onSwipeDown={() => setOpen(false)}>
@@ -118,9 +133,12 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
                 <Line label="Paid hours" value={calculation.hourBaseLine.amount} palette={palette} />
                 {calculation.hourSurchargeLines.filter((line) => line.amount > 0).map((line) => <Line key={line.label} label={line.label} value={line.amount} palette={palette} />)}
                 <Line label="Night" value={calculation.nightLine.amount} palette={palette} />
+                {calculation.holidayLine.amount > 0 && <Line label="Public holiday hours" value={calculation.holidayLine.amount} palette={palette} />}
+                {calculation.officialDayOffLine.amount > 0 && <Line label="Official day off hours" value={calculation.officialDayOffLine.amount} palette={palette} />}
                 <Line label="Sector supplements" value={calculation.sectorLines.reduce((sum, line) => sum + line.amount, 0)} palette={palette} />
                 {calculation.deadheadLine.amount > 0 && <Line label="Deadhead" value={calculation.deadheadLine.amount} palette={palette} />}
                 {calculation.sickLine.amount > 0 && <Line label={calculation.sickSource === 'known-payslip' ? 'Sick leave · known payslip' : 'Sick leave'} value={calculation.sickLine.amount} palette={palette} />}
+                {calculation.vacationLine.amount > 0 && <Line label={`Vacation pay · ${calculation.vacationDays} day${calculation.vacationDays === 1 ? '' : 's'}`} value={calculation.vacationLine.amount} palette={palette} />}
                 <Line label="Gross" value={calculation.gross} strong palette={palette} />
                 <Line label="OSMS" value={-calculation.osms} palette={palette} />
                 <Line label="OPV" value={-calculation.opv} palette={palette} />
@@ -174,6 +192,9 @@ const styles = StyleSheet.create({
   hint: { fontSize: 11, lineHeight: 16, marginTop: 4 },
   openGlyph: { fontSize: 30, fontWeight: '300', paddingLeft: 10 },
   divider: { height: StyleSheet.hairlineWidth, marginVertical: 12 },
+  inline: { flex: 1, minHeight: 0, gap: 2 }, inlineList: { flex: 1 },
+  inlineRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
+  inlineStation: { fontSize: 16, fontWeight: '700' }, inlineAmount: { fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.48)', justifyContent: 'flex-end' },
   sheet: { height: '88%', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, paddingHorizontal: 18, paddingTop: 9, paddingBottom: 10 },
   handle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 10 },
