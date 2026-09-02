@@ -6,7 +6,7 @@ import { SalarySettingsSheet } from './SalarySettingsSheet';
 import { SwipeSurface } from './SwipeSurface';
 import { exportRosterCalendar } from '@/src/domain/calendar';
 import type { Duty, Sector } from '@/src/domain/types';
-import { verifyLovedModeCode } from '@/src/domain/lovedMode';
+import { loadLovedMode, saveLovedMode, verifyLovedModeCode } from '@/src/domain/lovedMode';
 import { DEFAULT_PROFILE } from '@/src/domain/profile';
 import { sumReportedBlockMinutes, sumReportedNightMinutes } from '@/src/domain/layovers';
 import { formatMinutes, rosterMonthLabel, rosterToDuties } from '@/src/domain/rosterView';
@@ -28,7 +28,7 @@ type FocusDuty = RosterDuty & { reportMs: number; releaseMs: number };
 export default function MainScreen() {
   const dark = useColorScheme() === 'dark';
   const [tab, setTab] = useState<Tab>('Home');
-  const [lovedMode, setLovedMode] = useState(false);
+  const [lovedMode, setLovedMode] = useState(() => loadLovedMode());
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [unlockCode, setUnlockCode] = useState('');
   const [unlockError, setUnlockError] = useState(false);
@@ -98,7 +98,7 @@ export default function MainScreen() {
   };
 
   const requestLovedMode = () => {
-    if (lovedMode) { setLovedMode(false); return; }
+    if (lovedMode) { saveLovedMode(false); setLovedMode(false); return; }
     setUnlockCode('');
     setUnlockError(false);
     setUnlockOpen(true);
@@ -107,6 +107,7 @@ export default function MainScreen() {
     if (!verifyLovedModeCode(unlockCode)) { setUnlockError(true); return; }
     activateSpecialPayPreset();
     setPayRevision((value) => value + 1);
+    saveLovedMode(true);
     setLovedMode(true);
     setUnlockOpen(false);
     setUnlockCode('');
