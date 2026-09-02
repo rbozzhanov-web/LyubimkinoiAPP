@@ -1,4 +1,5 @@
 import type { StationStay } from './layovers';
+import { stationLocalDateTimeMs } from './stationTime';
 import type { PerDiemRegion, PerDiemRule } from './types';
 
 export interface PerDiemStayResult {
@@ -55,12 +56,20 @@ export function getKazakhstanPerDiemKzt(mrpKzt: number): number {
  * still paid once only, even when it spans several UTC dates.
  */
 export function kazakhstanQualifyingUtcDays(stay: StationStay): number {
-  const start = kzLocalToUtcMs(stay.arrivalLocal);
-  const end = kzLocalToUtcMs(stay.departureLocal);
+  return qualifyingUtcDay(stay, PER_DIEM_RULES.KZ.minimumStationMinutes);
+}
+
+function foreignQualifyingUtcDays(stay: StationStay): number {
+  return qualifyingUtcDay(stay, PER_DIEM_RULES.FOREIGN_50.minimumStationMinutes);
+}
+
+function qualifyingUtcDay(stay: StationStay, minimumStationMinutes: number): number {
+  const start = stationLocalToUtcMs(stay.station, stay.arrivalLocal);
+  const end = stationLocalToUtcMs(stay.station, stay.departureLocal);
   if (start === undefined || end === undefined || end <= start) return 0;
 
   const dayMs = 24 * 60 * 60 * 1000;
-  const thresholdMs = PER_DIEM_RULES.KZ.minimumStationMinutes * 60 * 1000;
+  const thresholdMs = minimumStationMinutes * 60 * 1000;
   let cursor = utcDayStart(start);
 
   while (cursor < end) {
@@ -93,7 +102,9 @@ export function calculatePerDiemStay(stay: StationStay, mrpKzt: number, usdKzt?:
     };
   }
 
-  const eligible = isLayoverEligible(region, stay.durationMinutes);
+  // A foreign relay is paid once when any UTC-calendar-day slice has strictly more
+  // than two hours at station. Its total duration alone is not enough around midnight.
+  const eligible = foreignQualifyingUtcDays(stay) > 0;
   const usdAmount = eligible ? (PER_DIEM_RULES[region].usdRate ?? 0) : 0;
   return {
     stay,
@@ -127,18 +138,10 @@ export function calculatePerDiemMonth(
   };
 }
 
-function kzLocalToUtcMs(value: string): number | undefined {
-  const stamp = naiveIsoMs(value);
-  return stamp === undefined ? undefined : stamp - 5 * 60 * 60 * 1000;
-}
-
-function naiveIsoMs(value: string): number | undefined {
+function stationLocalToUtcMs(station: string, value: string): number | undefined {
   const [date, time] = value.split('T');
   if (!date || !time) return undefined;
-  const [year, month, day] = date.split('-').map(Number);
-  const [hour, minute] = time.split(':').map(Number);
-  if ([year, month, day, hour, minute].some((part) => !Number.isFinite(part))) return undefined;
-  return Date.UTC(year, month - 1, day, hour, minute);
+  return stationLocalDateTimeMs(station, date, time);
 }
 
 function utcDayStart(timestamp: number): number {

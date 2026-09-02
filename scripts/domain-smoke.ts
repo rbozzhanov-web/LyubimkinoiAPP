@@ -4,6 +4,8 @@ import type { StationStay } from '../src/domain/layovers';
 import type { ParsedAirAstanaRoster } from '../src/import/parseAirAstanaRoster';
 import { extractCrewRecords } from '../src/import/crew';
 import { stationLocalDateTimeMs } from '../src/domain/stationTime';
+import { clearLovedMode, loadLovedMode, saveLovedMode } from '../src/storage/lovedModeStorage';
+import { swipeAxis } from '../src/domain/gesture';
 import type { ExtractedPage, TextItem } from '../src/import/types';
 
 const MRP_2026 = 4325;
@@ -12,6 +14,25 @@ function equal<T>(actual: T, expected: T, label?: string): void {
   if (Object.is(actual, expected)) return;
   throw new Error(`${label ?? 'assertion failed'}: expected ${String(expected)}, got ${String(actual)}`);
 }
+
+const modeValues = new Map<string, string>();
+Object.defineProperty(globalThis, 'localStorage', {
+  configurable: true,
+  value: {
+    getItem: (key: string) => modeValues.get(key) ?? null,
+    setItem: (key: string, value: string) => modeValues.set(key, value),
+    removeItem: (key: string) => modeValues.delete(key),
+  },
+});
+equal(loadLovedMode(), false, 'special mode starts disabled on this device');
+saveLovedMode();
+equal(loadLovedMode(), true, 'special mode survives an app relaunch on this device');
+clearLovedMode();
+equal(loadLovedMode(), false, 'turning special mode off clears its local activation');
+
+equal(swipeAxis(48, 20, true, false), 'horizontal', 'dominant horizontal movement drags the screen layer');
+equal(swipeAxis(16, 48, false, true), 'down', 'dominant downward movement drags the sheet layer');
+equal(swipeAxis(20, 20, true, true), undefined, 'diagonal movement does not steal scroll gestures');
 
 function stay(station: string, arrivalLocal: string, departureLocal: string, durationMinutes: number): StationStay {
   return {
@@ -46,6 +67,16 @@ equal(calculatePerDiemStay(stay('TGD', '2026-07-01T10:00', '2026-07-01T14:00', 2
 equal(calculatePerDiemStay(stay('HER', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 60, 'EU Greece $60');
 equal(calculatePerDiemStay(stay('FRA', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 60, 'EU Germany $60');
 equal(calculatePerDiemStay(stay('LHR', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 60, 'UK $60');
+
+// Foreign layovers also qualify against UTC calendar-day slices. A relay spanning three
+// hours can still be unpaid when midnight UTC divides it into slices of no more than two hours.
+const splitForeign = calculatePerDiemStay(stay('IST', '2026-07-08T01:30', '2026-07-08T04:30', 180), MRP_2026);
+equal(splitForeign.eligible, false, 'foreign slices of 1:30 each do not qualify');
+equal(splitForeign.units, 0, 'unqualified foreign relay has no unit');
+
+const qualifyingForeign = calculatePerDiemStay(stay('IST', '2026-07-08T01:30', '2026-07-08T05:30', 240), MRP_2026);
+equal(qualifyingForeign.eligible, true, 'foreign UTC slice over two hours qualifies');
+equal(qualifyingForeign.units, 1, 'foreign relay still pays once');
 
 // Other Crew often continues onto page 2 without repeating the table heading. This synthetic
 // fixture locks the real August failure mode without storing any real employee data in the repo.

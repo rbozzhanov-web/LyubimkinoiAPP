@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, FlatList, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View, useColorScheme, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SalaryCard } from './SalaryCard';
 import { SalarySettingsSheet } from './SalarySettingsSheet';
@@ -16,6 +16,7 @@ import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
 import { clearPayData } from '@/src/storage/payStorage';
 import { clearStoredRosters, loadStoredRosters, upsertStoredRoster } from '@/src/storage/rosterStorage';
 import { activateSpecialPayPreset } from '@/src/storage/specialPayPreset';
+import { clearLovedMode, loadLovedMode, saveLovedMode } from '@/src/storage/lovedModeStorage';
 
 type Tab = 'Home' | 'Roster' | 'Money' | 'More';
 const TABS: Tab[] = ['Home', 'Roster', 'Money', 'More'];
@@ -40,6 +41,8 @@ export default function MainScreen() {
   // for good and only later-mounted subtrees turn dark. Render light once to match the
   // server, then switch: the palette then differs between renders and React patches it.
   const scheme = useColorScheme();
+  const { width } = useWindowDimensions();
+  const desktopWeb = Platform.OS === 'web' && width >= 768;
   const [hydrated, setHydrated] = useState(Platform.OS !== 'web');
   useEffect(() => { if (!hydrated) setHydrated(true); }, [hydrated]);
   const dark = hydrated && scheme === 'dark';
@@ -55,6 +58,10 @@ export default function MainScreen() {
   const [importError, setImportError] = useState<string>();
   const [salarySettingsOpen, setSalarySettingsOpen] = useState(false);
   const [payRevision, setPayRevision] = useState(0);
+
+  // Defer the local read until after web hydration so the statically rendered page and the
+  // first browser render agree. The saved preference then restores on this device only.
+  useEffect(() => { setLovedMode(loadLovedMode()); }, []);
 
   useEffect(() => {
     const stored = loadStoredRosters();
@@ -114,7 +121,7 @@ export default function MainScreen() {
   };
 
   const requestLovedMode = () => {
-    if (lovedMode) { setLovedMode(false); return; }
+    if (lovedMode) { clearLovedMode(); setLovedMode(false); return; }
     setUnlockCode('');
     setUnlockError(false);
     setUnlockOpen(true);
@@ -122,6 +129,7 @@ export default function MainScreen() {
   const submitCode = () => {
     if (!verifyLovedModeCode(unlockCode)) { setUnlockError(true); return; }
     activateSpecialPayPreset();
+    saveLovedMode();
     setPayRevision((value) => value + 1);
     setLovedMode(true);
     setUnlockOpen(false);
@@ -131,6 +139,8 @@ export default function MainScreen() {
   const eraseAll = () => {
     clearStoredRosters();
     clearPayData();
+    clearLovedMode();
+    setLovedMode(false);
     setRosters([]);
     setActiveMonth(undefined);
     setSelectedFlight(undefined);
@@ -138,11 +148,20 @@ export default function MainScreen() {
     setTab('Home');
   };
 
-  return <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]} edges={['top', 'bottom']}>
+  return <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]} edges={desktopWeb ? ['bottom'] : ['top', 'bottom']}>
     <View style={styles.app}>
       <View style={styles.header}>
         <View>
-          <Text style={[styles.brand, { color: palette.text }]}>KhaVair</Text>
+          {lovedMode
+            ? <View style={styles.brandWord} accessibilityLabel="KhaVair special mode">
+                <Text style={[styles.brand, { color: palette.text }]}>Kha</Text>
+                <View style={styles.vHeartMark}>
+                  <Text style={[styles.brand, styles.vHeartLetter, { color: palette.rose }]}>V</Text>
+                  <Text style={[styles.vHeartGlyph, { color: palette.rose }]}>♥</Text>
+                </View>
+                <Text style={[styles.brand, { color: palette.text }]}>air</Text>
+              </View>
+            : <Text style={[styles.brand, { color: palette.text }]}>KhaVair</Text>}
           <Text style={[styles.kicker, { color: palette.muted }]}>CABIN CREW COMPANION</Text>
         </View>
         <Pressable onPress={requestLovedMode} style={[styles.modeButton, { backgroundColor: lovedMode ? palette.accentSoft : palette.surface, borderColor: lovedMode ? palette.rose : 'transparent', borderWidth: lovedMode ? 1 : 0 }]} accessibilityLabel="Special mode">
@@ -403,7 +422,7 @@ function operatingCount(roster: ParsedAirAstanaRoster) { return roster.sectors.f
 
 const styles = StyleSheet.create({
   safe: { flex: 1 }, app: { flex: 1, width: '100%', maxWidth: 620, alignSelf: 'center', paddingHorizontal: 16 },
-  header: { height: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, brand: { fontSize: 27, fontWeight: '700', letterSpacing: -.8 }, kicker: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
+  header: { height: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, brand: { fontSize: 27, fontWeight: '700', letterSpacing: -.8 }, brandWord: { flexDirection: 'row', alignItems: 'baseline' }, vHeartMark: { width: 22, height: 31, position: 'relative', justifyContent: 'center' }, vHeartLetter: { letterSpacing: -2 }, vHeartGlyph: { position: 'absolute', bottom: 0, left: 8, fontSize: 10, lineHeight: 10 }, kicker: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
   modeButton: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }, modeGlyph: { fontSize: 19 },
   viewport: { flex: 1, minHeight: 0 }, screen: { flex: 1, paddingTop: 8, gap: 12 }, grow: { flex: 1, minWidth: 0 },
   sectionTitle: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.8 }, intro: { fontSize: 15, lineHeight: 22 }, label: { fontSize: 11, fontWeight: '700', letterSpacing: .9 }, meta: { fontSize: 13, lineHeight: 18 },
@@ -425,6 +444,6 @@ const styles = StyleSheet.create({
   emptyCard: { borderWidth: 1, borderRadius: 20, padding: 14 }, innerWindow: { flex: 1, minHeight: 0, borderWidth: 1, borderRadius: 20, overflow: 'hidden' }, listContent: { padding: 8, gap: 7, paddingBottom: 18 }, rosterCard: { borderWidth: 1, borderRadius: 16, padding: 13 }, flightCardTop: { flexDirection: 'row', justifyContent: 'space-between' }, flightNumber: { fontSize: 11, fontWeight: '700' }, rosterRoute: { fontSize: 20, fontWeight: '700', marginTop: 4 },
   infoCard: { borderWidth: 1, borderRadius: 20, padding: 14, gap: 3 }, cardTitle: { fontSize: 15, fontWeight: '700' }, settingsCard: { minHeight: 68, borderWidth: 1, borderRadius: 20, padding: 14, flexDirection: 'row', alignItems: 'center' }, chevron: { fontSize: 30 }, secondaryButton: { height: 48, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, secondaryText: { fontWeight: '600' },
   tabBar: { height: 68, marginTop: 8, marginBottom: 4, borderWidth: 1, borderRadius: 22, flexDirection: 'row' }, tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabIconWrap: { minWidth: 35, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, tabIcon: { textAlign: 'center' }, tabText: { fontSize: 11, fontWeight: '600' },
-  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end', paddingHorizontal: 10, paddingBottom: 10 }, flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderWidth: 1, borderRadius: 28, paddingHorizontal: 18, paddingTop: 9, paddingBottom: 12, overflow: 'hidden' }, sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }, sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 }, sheetClose: { width: 44, height: 44, borderWidth: 1, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }, sheetCloseText: { fontSize: 27 }, swipeHint: { fontSize: 10, marginTop: 7 }, flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 7 }, crewList: { paddingBottom: 12 }, crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' }, avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, avatarText: { fontSize: 12, fontWeight: '800' }, crewName: { fontSize: 14, fontWeight: '600' },
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end' }, flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderTopWidth: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 18, paddingTop: 9, paddingBottom: 12, overflow: 'hidden' }, sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }, sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 }, sheetClose: { width: 44, height: 44, borderWidth: 1, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }, sheetCloseText: { fontSize: 27 }, swipeHint: { fontSize: 10, marginTop: 7 }, flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 7 }, crewList: { paddingBottom: 12 }, crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' }, avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, avatarText: { fontSize: 12, fontWeight: '800' }, crewName: { fontSize: 14, fontWeight: '600' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.46)', alignItems: 'center', justifyContent: 'center', padding: 20 }, unlockCard: { width: '100%', maxWidth: 390, borderWidth: 1, borderRadius: 26, padding: 20 }, unlockTitle: { fontSize: 26, fontWeight: '700', marginTop: 7 }, codeInput: { height: 54, borderWidth: 1, borderRadius: 15, marginTop: 18, paddingHorizontal: 16, fontSize: 22, letterSpacing: 5, textAlign: 'center' }, codeHint: { fontSize: 11, marginTop: 6 }, actions: { flexDirection: 'row', gap: 9, marginTop: 18 }, action: { flex: 1, height: 46, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
 });
