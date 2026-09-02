@@ -139,12 +139,10 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
           onLayout={(event) => { sheetHeight.current = event.nativeEvent.layout.height; }}
           style={[styles.sheetBase, WEB_GLASS, style]}
         >
-          <View style={styles.sheetInteraction} {...responder.panHandlers}>
-            <View style={styles.grabberTouch}>
-              <View style={[styles.grabber, { backgroundColor: handleColor }]} />
-            </View>
-            {content}
+          <View style={styles.grabberTouch} {...responder.panHandlers}>
+            <View style={[styles.grabber, { backgroundColor: handleColor }]} />
           </View>
+          {content}
         </View>
       </Animated.View>
     </View>
@@ -223,7 +221,6 @@ const styles = StyleSheet.create({
     shadowRadius: 26,
     elevation: 24,
   },
-  sheetInteraction: { minHeight: 0 },
   grabberTouch: { height: 28, alignItems: 'center', justifyContent: 'center' },
   grabber: { width: 36, height: 5, borderRadius: 3, opacity: 0.66 },
   dialogHost: { alignItems: 'center', justifyContent: 'center', padding: 20 },
