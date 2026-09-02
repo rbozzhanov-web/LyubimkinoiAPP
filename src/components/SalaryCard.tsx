@@ -17,6 +17,7 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
   const monthKey = roster.period.start.slice(0, 7);
   const monthLabel = formatMonthLabel(monthKey);
   const [open, setOpen] = useState(false);
+  const [sheetScrollAtTop, setSheetScrollAtTop] = useState(true);
   const [profile, setProfile] = useState<Partial<PayProfile>>();
   const [month, setMonth] = useState<PayMonthOverrides>();
   const [mrp, setMrp] = useState<MrpSnapshot>();
@@ -52,8 +53,13 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
   );
   const paidLayovers = perDiem?.items.filter((item) => item.eligible) ?? [];
 
+  const openDetails = () => {
+    setSheetScrollAtTop(true);
+    setOpen(true);
+  };
+
   return <>
-    <Pressable onPress={() => setOpen(true)} style={[styles.card, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]} accessibilityRole="button" accessibilityLabel={`Open money details for ${monthLabel}`}>
+    <Pressable onPress={openDetails} style={[styles.card, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]} accessibilityRole="button" accessibilityLabel={`Open money details for ${monthLabel}`}>
       <View style={styles.periodRow}>
         <Text style={[styles.label, { color: palette.muted }]}>PAY PERIOD</Text>
         <Text style={[styles.periodMonth, { color: palette.text }]}>{monthLabel}</Text>
@@ -96,6 +102,7 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
       visible={open}
       onClose={() => setOpen(false)}
       handleColor={palette.line}
+      scrollAtTop={sheetScrollAtTop}
       style={[styles.sheet, { backgroundColor: palette.background, borderColor: palette.line }]}
     >
       <>
@@ -106,7 +113,13 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
           </View>
         </View>
 
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={(event) => setSheetScrollAtTop(event.nativeEvent.contentOffset.y <= 1)}
+        >
           <Text style={[styles.section, { color: palette.text }]}>Qualifying layovers</Text>
           {perDiem ? <>
             <View style={[styles.summary, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>

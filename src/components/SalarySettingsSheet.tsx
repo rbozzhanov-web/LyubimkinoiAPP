@@ -25,11 +25,13 @@ export function SalarySettingsSheet({ visible, roster, palette, onClose, onSaved
   const monthKey = roster?.period.start.slice(0, 7);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
   const [error, setError] = useState<string>();
+  const [scrollAtTop, setScrollAtTop] = useState(true);
 
   useEffect(() => {
     if (!visible) return;
     setDraft(draftFrom(loadPayProfile(), monthKey ? loadPayMonth(monthKey) : undefined));
     setError(undefined);
+    setScrollAtTop(true);
   }, [visible, monthKey]);
 
   const save = (dismiss: () => void) => {
@@ -69,6 +71,7 @@ export function SalarySettingsSheet({ visible, roster, palette, onClose, onSaved
     visible={visible}
     onClose={onClose}
     handleColor={palette.line}
+    scrollAtTop={scrollAtTop}
     style={[styles.sheet, { backgroundColor: palette.background, borderColor: palette.line }]}
   >
     {(dismiss) => <>
@@ -78,7 +81,14 @@ export function SalarySettingsSheet({ visible, roster, palette, onClose, onSaved
           <Text style={[styles.meta, { color: palette.muted }]}>Optional · stored only on this device</Text>
         </View>
       </View>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={(event) => setScrollAtTop(event.nativeEvent.contentOffset.y <= 1)}
+      >
         <Field label="Hourly rate · ₸" value={draft.hourlyRate} onChange={(v) => setDraft((d) => ({ ...d, hourlyRate: v }))} palette={palette} />
         <Field label="Full monthly salary · ₸" value={draft.monthlySalary} onChange={(v) => setDraft((d) => ({ ...d, monthlySalary: v }))} palette={palette} />
         <Field label="Transport allowance · ₸" value={draft.monthlyTransport} onChange={(v) => setDraft((d) => ({ ...d, monthlyTransport: v }))} palette={palette} />
