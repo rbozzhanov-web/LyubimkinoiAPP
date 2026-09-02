@@ -139,8 +139,9 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
         <View
           onLayout={(event) => { sheetHeight.current = event.nativeEvent.layout.height; }}
           style={[styles.sheetBase, WEB_GLASS, style]}
+          {...responder.panHandlers}
         >
-          <View style={styles.grabberTouch} {...responder.panHandlers}>
+          <View style={styles.grabberTouch}>
             <View style={[styles.grabber, { backgroundColor: handleColor }]} />
           </View>
           {content}
