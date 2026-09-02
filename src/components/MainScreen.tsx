@@ -290,7 +290,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
         renderItem={({ item }) => <View style={[styles.upNextRow, { borderColor: palette.line }]}>
           <Text style={[styles.upNextDate, { color: palette.muted }]}>{item.duty.dateLabel}</Text>
           <Text numberOfLines={1} style={[styles.upNextRoute, { color: palette.text }]}>{routeChain(item.duty)}</Text>
-          <Text style={[styles.upNextTime, { color: palette.muted }]}>{item.duty.reportTime}</Text>
+          <Text style={[styles.upNextTime, { color: palette.muted }]}>{isUpcoming || isActive ? item.duty.reportTime : item.duty.releaseTime}</Text>
         </View>} />
     </View>}
   </View>;
