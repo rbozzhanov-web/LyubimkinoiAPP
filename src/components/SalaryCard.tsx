@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
 import { calculateRosterPay, formatKzt, payReadiness, type PayCalculation, type PayMonthOverrides, type PayProfile } from '@/src/domain/pay';
 import { CREW_PAY_NORM_STATED_TO } from '@/src/domain/crewPayNorm';
@@ -69,6 +69,21 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
         ? <Text style={[styles.meta, { color: palette.muted }]}>Gross {formatKzt(calculation.gross)} · {calculation.paidHours.toFixed(2)} paid h · {calculation.operatingSectors} sectors</Text>
         : <Text style={[styles.meta, { color: palette.muted }]}>{readiness.missing.length ? 'More → Salary settings' : 'Waiting for annual MRP.'}</Text>}
     </Pressable>
+
+    {perDiem && <View style={styles.inline}>
+      <Text style={[styles.label, { color: palette.muted }]}>QUALIFYING LAYOVERS</Text>
+      {paidLayovers.length
+        ? <FlatList data={paidLayovers} style={styles.inlineList} showsVerticalScrollIndicator={false}
+            keyExtractor={(item) => `${item.stay.arrivalLocal}-${item.stay.station}`}
+            renderItem={({ item }) => <View style={[styles.inlineRow, { borderColor: palette.line }]}>
+              <View style={styles.grow}>
+                <Text style={[styles.inlineStation, { color: palette.text }]}>{item.stay.station}</Text>
+                <Text style={[styles.meta, { color: palette.muted }]}>{shortDate(item.stay.arrivalLocal)} · {formatStayDuration(item.stay.durationMinutes)}</Text>
+              </View>
+              <Text style={[styles.inlineAmount, { color: palette.accent }]}>{perDiemItemAmount(item)}</Text>
+            </View>} />
+        : <Text style={[styles.meta, { color: palette.muted }]}>No layover this month met its minimum ground time.</Text>}
+    </View>}
 
     <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
       <View style={styles.backdrop}>
@@ -174,6 +189,9 @@ const styles = StyleSheet.create({
   hint: { fontSize: 11, lineHeight: 16, marginTop: 4 },
   openGlyph: { fontSize: 30, fontWeight: '300', paddingLeft: 10 },
   divider: { height: StyleSheet.hairlineWidth, marginVertical: 12 },
+  inline: { flex: 1, minHeight: 0, gap: 2 }, inlineList: { flex: 1 },
+  inlineRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
+  inlineStation: { fontSize: 16, fontWeight: '700' }, inlineAmount: { fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.48)', justifyContent: 'flex-end' },
   sheet: { height: '88%', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, paddingHorizontal: 18, paddingTop: 9, paddingBottom: 10 },
   handle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 10 },

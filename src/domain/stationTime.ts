@@ -13,12 +13,41 @@ const STATION_TIME_ZONES: Record<string, string> = {
   UKK: 'Asia/Almaty', URA: 'Asia/Oral', CIT: 'Asia/Almaty', KSN: 'Asia/Qostanay', PLX: 'Asia/Almaty',
 };
 
+// Kazakhstan re-based its whole territory on UTC+5 on 1 March 2024. An engine carrying
+// tzdata older than 2024a still answers UTC+6 for Almaty — WebKit does — and then every
+// duty anchored at the base is an hour out: its length, the countdown to report, which
+// calendar day a sector landed on, the night-hour window and the per-diem hour thresholds
+// all resolve through here. These offsets are fixed and have no daylight saving, so pin
+// them rather than trusting whichever database the browser happens to ship.
+const KAZAKHSTAN_UNIFIED_UTC5_FROM = Date.UTC(2024, 2, 1);
+
+function pinnedOffsetMinutes(zone: string, year: number, month: number, day: number): number | undefined {
+  switch (zone) {
+    // The two zones that actually moved: UTC+6 before the change, UTC+5 after it.
+    case 'Asia/Almaty':
+    case 'Asia/Qostanay':
+      return Date.UTC(year, month - 1, day) >= KAZAKHSTAN_UNIFIED_UTC5_FROM ? 300 : 360;
+    // Western Kazakhstan was already UTC+5, as was Qyzylorda from December 2018.
+    case 'Asia/Aqtau':
+    case 'Asia/Aqtobe':
+    case 'Asia/Atyrau':
+    case 'Asia/Oral':
+    case 'Asia/Qyzylorda':
+      return 300;
+    default:
+      return undefined;
+  }
+}
+
 export function stationLocalDateTimeMs(station: string, date: string, time: string): number | undefined {
   const zone = STATION_TIME_ZONES[station.trim().toUpperCase()];
   if (!zone) return undefined;
   const [year, month, day] = date.split('-').map(Number);
   const [hour, minute] = time.split(':').map(Number);
   if ([year, month, day, hour, minute].some((part) => !Number.isFinite(part))) return undefined;
+
+  const pinned = pinnedOffsetMinutes(zone, year, month, day);
+  if (pinned !== undefined) return Date.UTC(year, month - 1, day, hour, minute) - pinned * 60000;
 
   // Start with the same wall-clock fields as UTC, then iteratively subtract the target zone offset.
   let utc = Date.UTC(year, month - 1, day, hour, minute, 0);

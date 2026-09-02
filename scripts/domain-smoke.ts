@@ -3,6 +3,7 @@ import { calculateRosterPay } from '../src/domain/pay';
 import type { StationStay } from '../src/domain/layovers';
 import type { ParsedAirAstanaRoster } from '../src/import/parseAirAstanaRoster';
 import { extractCrewRecords } from '../src/import/crew';
+import { stationLocalDateTimeMs } from '../src/domain/stationTime';
 import type { ExtractedPage, TextItem } from '../src/import/types';
 
 const MRP_2026 = 4325;
@@ -108,5 +109,19 @@ equal(pay.nightLine.amount, 21250, 'night supplement');
 equal(pay.sectorLines.reduce((sum, line) => sum + line.amount, 0), 16000, 'sector supplement');
 equal(pay.gross, 259750, 'gross');
 equal(pay.net, 218697, 'net');
+
+// Station clocks must not depend on the browser's timezone database. WebKit still ships
+// pre-2024 tzdata that puts Almaty on UTC+6, which would make every Kazakhstan duty an
+// hour long or short.
+const alaNoon = stationLocalDateTimeMs('ALA', '2026-08-28', '12:00');
+equal(alaNoon, Date.UTC(2026, 7, 28, 7, 0), 'ALA is UTC+5 after the 2024 unification');
+equal(stationLocalDateTimeMs('ALA', '2023-08-28', '12:00'), Date.UTC(2023, 7, 28, 6, 0), 'ALA was UTC+6 before it');
+equal(stationLocalDateTimeMs('KSN', '2026-08-28', '12:00'), Date.UTC(2026, 7, 28, 7, 0), 'Qostanay moved with Almaty');
+equal(stationLocalDateTimeMs('SCO', '2026-08-28', '12:00'), Date.UTC(2026, 7, 28, 7, 0), 'Aqtau was already UTC+5');
+
+// The duty that exposed it: ICN 10:10 report to ALA 15:07 release is 8h57, not 7h57.
+const icnReport = stationLocalDateTimeMs('ICN', '2026-08-28', '10:10');
+const alaRelease = stationLocalDateTimeMs('ALA', '2026-08-28', '15:07');
+equal((alaRelease! - icnReport!) / 60000, 537, 'ICN->ALA duty spans 8:57');
 
 console.log('Domain smoke tests passed');

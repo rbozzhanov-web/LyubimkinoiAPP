@@ -251,5 +251,6 @@ function positive(value: number | undefined): value is number { return typeof va
 function nonNegative(value: number | undefined): value is number { return typeof value === 'number' && Number.isFinite(value) && value >= 0; }
 
 export function formatKzt(value: number): string {
-  return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value)} ₸`;
+  // Tenge is paid whole; a converted per-diem total printed "158 825,4 ₸" before this.
+  return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(value)} ₸`;
 }

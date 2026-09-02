@@ -19,7 +19,15 @@ import { activateSpecialPayPreset } from '@/src/storage/specialPayPreset';
 
 type Tab = 'Home' | 'Roster' | 'Money' | 'More';
 const TABS: Tab[] = ['Home', 'Roster', 'Money', 'More'];
-const TAB_ICONS: Record<Tab, string> = { Home: '⌂', Roster: '✈︎', Money: '₸', More: '•••' };
+// These glyphs are drawn from four different Unicode blocks, so at one font size they do
+// not match: the house sits small and light, the tenge sign reads as text, the dots sit low.
+// Size and nudge each so the row looks like one set.
+const TAB_ICONS: Record<Tab, { glyph: string; size: number; nudge: number; weight: '700' | '800' }> = {
+  Home: { glyph: '⌂', size: 25, nudge: -1, weight: '700' },
+  Roster: { glyph: '✈︎', size: 18, nudge: 0, weight: '700' },
+  Money: { glyph: '₸', size: 19, nudge: 0, weight: '800' },
+  More: { glyph: '•••', size: 15, nudge: -3, weight: '700' },
+};
 type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua', string>;
 type FlightRow = { duty: Duty; sector: Sector };
 type RosterDuty = { roster: ParsedAirAstanaRoster; duty: Duty };
@@ -153,7 +161,7 @@ export default function MainScreen() {
         {TABS.map((item) => {
           const active = item === tab;
           return <Pressable key={item} onPress={() => { setSelectedFlight(undefined); setTab(item); }} style={styles.tabItem} accessibilityRole="tab" accessibilityState={{ selected: active }}>
-            <View style={[styles.tabIconWrap, active && { backgroundColor: palette.accentSoft }]}><Text style={[styles.tabIcon, { color: active ? palette.accent : palette.muted }]}>{TAB_ICONS[item]}</Text></View>
+            <View style={[styles.tabIconWrap, active && { backgroundColor: palette.accentSoft }]}><Text style={[styles.tabIcon, { color: active ? palette.accent : palette.muted, fontSize: TAB_ICONS[item].size, lineHeight: TAB_ICONS[item].size + 3, marginTop: TAB_ICONS[item].nudge, fontWeight: TAB_ICONS[item].weight }]}>{TAB_ICONS[item].glyph}</Text></View>
             <Text style={[styles.tabText, { color: active ? palette.text : palette.muted }]}>{item}</Text>
           </Pressable>;
         })}
@@ -416,7 +424,7 @@ const styles = StyleSheet.create({
   monthNav: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, monthNavText: { fontSize: 12, fontWeight: '600' }, error: { fontSize: 12 },
   emptyCard: { borderWidth: 1, borderRadius: 20, padding: 14 }, innerWindow: { flex: 1, minHeight: 0, borderWidth: 1, borderRadius: 20, overflow: 'hidden' }, listContent: { padding: 8, gap: 7, paddingBottom: 18 }, rosterCard: { borderWidth: 1, borderRadius: 16, padding: 13 }, flightCardTop: { flexDirection: 'row', justifyContent: 'space-between' }, flightNumber: { fontSize: 11, fontWeight: '700' }, rosterRoute: { fontSize: 20, fontWeight: '700', marginTop: 4 },
   infoCard: { borderWidth: 1, borderRadius: 20, padding: 14, gap: 3 }, cardTitle: { fontSize: 15, fontWeight: '700' }, settingsCard: { minHeight: 68, borderWidth: 1, borderRadius: 20, padding: 14, flexDirection: 'row', alignItems: 'center' }, chevron: { fontSize: 30 }, secondaryButton: { height: 48, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, secondaryText: { fontWeight: '600' },
-  tabBar: { height: 68, marginTop: 8, marginBottom: 4, borderWidth: 1, borderRadius: 22, flexDirection: 'row' }, tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabIconWrap: { minWidth: 35, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, tabIcon: { fontSize: 19, lineHeight: 22, fontWeight: '700' }, tabText: { fontSize: 11, fontWeight: '600' },
+  tabBar: { height: 68, marginTop: 8, marginBottom: 4, borderWidth: 1, borderRadius: 22, flexDirection: 'row' }, tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabIconWrap: { minWidth: 35, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, tabIcon: { textAlign: 'center' }, tabText: { fontSize: 11, fontWeight: '600' },
   sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end', paddingHorizontal: 10, paddingBottom: 10 }, flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderWidth: 1, borderRadius: 28, paddingHorizontal: 18, paddingTop: 9, paddingBottom: 12, overflow: 'hidden' }, sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }, sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 }, sheetClose: { width: 44, height: 44, borderWidth: 1, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }, sheetCloseText: { fontSize: 27 }, swipeHint: { fontSize: 10, marginTop: 7 }, flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 7 }, crewList: { paddingBottom: 12 }, crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' }, avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, avatarText: { fontSize: 12, fontWeight: '800' }, crewName: { fontSize: 14, fontWeight: '600' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.46)', alignItems: 'center', justifyContent: 'center', padding: 20 }, unlockCard: { width: '100%', maxWidth: 390, borderWidth: 1, borderRadius: 26, padding: 20 }, unlockTitle: { fontSize: 26, fontWeight: '700', marginTop: 7 }, codeInput: { height: 54, borderWidth: 1, borderRadius: 15, marginTop: 18, paddingHorizontal: 16, fontSize: 22, letterSpacing: 5, textAlign: 'center' }, codeHint: { fontSize: 11, marginTop: 6 }, actions: { flexDirection: 'row', gap: 9, marginTop: 18 }, action: { flex: 1, height: 46, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
 });
