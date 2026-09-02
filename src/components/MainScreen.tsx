@@ -300,8 +300,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
   const block = roster.totals.blockMinutes;
   const night = roster.totals.nightMinutes;
   const nightShare = block && night !== undefined ? Math.round((night / block) * 100) : undefined;
-  const neighbours = adjacentDuties(timeline, focus, isUpcoming || isActive, 6);
-  const showingPrevious = !isUpcoming && !isActive;
+  const neighbours = previousDuties(timeline, focus, now, 6);
 
   return <View style={styles.screen}>
     <View style={styles.dutyHead}>
@@ -342,14 +341,14 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
     </Text>}
 
     {neighbours.length > 0 && <View style={styles.upNext}>
-      <Text style={[styles.label, { color: palette.muted }]}>{showingPrevious ? 'PREVIOUS FLIGHT' : 'THEN'}</Text>
+      <Text style={[styles.label, { color: palette.muted }]}>PREVIOUS FLIGHTS</Text>
       <FlatList data={neighbours} keyExtractor={(item) => item.duty.id} showsVerticalScrollIndicator={false} style={styles.upNextList}
         renderItem={({ item }) => <View style={[styles.upNextRow, { borderColor: palette.line }]}>
           <Text style={[styles.upNextDate, { color: palette.muted }]}>{item.duty.dateLabel}</Text>
           <Text numberOfLines={1} style={[styles.upNextRoute, { color: palette.text }]}>{routeChain(item.duty)}</Text>
           <View style={styles.upNextTimeBlock}>
-            {showingPrevious && <Text style={[styles.upNextTimeLabel, { color: palette.muted }]}>RELEASED AT</Text>}
-            <Text style={[styles.upNextTime, { color: palette.muted }]}>{showingPrevious ? item.duty.releaseTime : item.duty.reportTime}</Text>
+            <Text style={[styles.upNextTimeLabel, { color: palette.muted }]}>RELEASED AT</Text>
+            <Text style={[styles.upNextTime, { color: palette.muted }]}>{item.duty.releaseTime}</Text>
           </View>
         </View>} />
     </View>}
@@ -543,13 +542,11 @@ function pickFocusDuty(timed: FocusDuty[], now: number): FocusDuty | undefined {
   return timed[timed.length - 1];
 }
 
-function adjacentDuties(timed: FocusDuty[], focus: FocusDuty | undefined, forward: boolean, count = 3): FocusDuty[] {
-  if (!focus) return [];
-  const index = timed.findIndex((item) => item.duty.id === focus.duty.id);
-  if (index < 0) return [];
-  return forward
-    ? timed.slice(index + 1, index + 1 + count)
-    : timed.slice(Math.max(0, index - count), index).reverse();
+function previousDuties(timed: FocusDuty[], focus: FocusDuty | undefined, now: number, count = 3): FocusDuty[] {
+  return timed
+    .filter((item) => item.releaseMs < now && item.duty.id !== focus?.duty.id)
+    .sort((a, b) => b.releaseMs - a.releaseMs)
+    .slice(0, count);
 }
 function formatCountdown(milliseconds: number): string {
   const total = Math.max(0, Math.floor(milliseconds / 1000));
@@ -561,7 +558,9 @@ function rosterDateMeta(duty: Duty): { label: string; weekend: boolean } {
   if (!duty.date) return { label: duty.dateLabel, weekend: false };
   const [year, month, day] = duty.date.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
-  if (!Number.isFinite(date.getTime())) return { label: duty.dateLabel, weekend: false };
+  if (!Number.isFinite(date.getTime()) || date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    return { label: duty.dateLabel, weekend: false };
+  }
   const weekdayIndex = date.getUTCDay();
   const weekday = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][weekdayIndex];
   return { label: `${duty.dateLabel} · ${weekday}`, weekend: weekdayIndex === 0 || weekdayIndex === 6 };
