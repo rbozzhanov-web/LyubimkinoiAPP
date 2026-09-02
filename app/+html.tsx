@@ -28,74 +28,91 @@ const APP_SHELL_CSS = `
 
     /*
      * Special Mode dark palette follows the app icon: deep navy, warm ivory,
-     * muted champagne/gold, dusty peach and desaturated blue. The selectors
-     * intentionally match only the existing Special Mode dark colors, so the
-     * normal dark theme and all light-theme palettes remain untouched.
+     * muted champagne/gold, dusty peach and desaturated blue. These selectors
+     * match only the current Special Mode dark colors and the exact CSS property
+     * using them, leaving normal dark mode and both light palettes untouched.
      */
     body:has(#root [aria-label="KhaVair special mode"]) { background: #0F1821; }
 
-    #root:has([aria-label="KhaVair special mode"]) [style*="#1B1114"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(27, 17, 20)"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(27,17,20)"] {
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color: rgb(27, 17, 20)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color:rgb(27,17,20)"] {
       background-color: #0F1821 !important;
     }
 
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgba(36, 23, 26, 0.76)"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgba(36,23,26,0.76)"] {
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color: rgba(36, 23, 26, 0.76)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color:rgba(36,23,26,0.76)"] {
       background-color: rgba(22, 32, 42, .80) !important;
     }
 
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgba(44, 27, 32, 0.84)"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgba(44,27,32,0.84)"] {
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color: rgba(44, 27, 32, 0.84)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color:rgba(44,27,32,0.84)"] {
       background-color: rgba(29, 40, 52, .88) !important;
     }
 
-    #root:has([aria-label="KhaVair special mode"]) [style*="#FFF5F2"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(255, 245, 242)"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(255,245,242)"] {
+    #root:has([aria-label="KhaVair special mode"]) [style*="color: rgb(255, 245, 242)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="color:rgb(255,245,242)"] {
       color: #F4EBDD !important;
     }
 
-    #root:has([aria-label="KhaVair special mode"]) [style*="#DCB2AB"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(220, 178, 171)"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(220,178,171)"] {
+    #root:has([aria-label="KhaVair special mode"]) [style*="color: rgb(220, 178, 171)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="color:rgb(220,178,171)"] {
       color: #BFAF99 !important;
     }
 
-    #root:has([aria-label="KhaVair special mode"]) [style*="#5A363E"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(90, 54, 62)"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(90,54,62)"] {
+    #root:has([aria-label="KhaVair special mode"]) [style*="border-color: rgb(90, 54, 62)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="border-color:rgb(90,54,62)"] {
       border-color: #334250 !important;
+    }
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color: rgb(90, 54, 62)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color:rgb(90,54,62)"] {
+      background-color: #334250 !important;
+    }
+    #root:has([aria-label="KhaVair special mode"]) [style*="color: rgb(90, 54, 62)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="color:rgb(90,54,62)"] {
       color: #334250 !important;
     }
 
-    #root:has([aria-label="KhaVair special mode"]) [style*="#F06445"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(240, 100, 69)"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(240,100,69)"] {
+    #root:has([aria-label="KhaVair special mode"]) [style*="color: rgb(240, 100, 69)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="color:rgb(240,100,69)"] {
       color: #C6A778 !important;
+    }
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color: rgb(240, 100, 69)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color:rgb(240,100,69)"] {
       background-color: #C6A778 !important;
+    }
+    #root:has([aria-label="KhaVair special mode"]) [style*="border-color: rgb(240, 100, 69)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="border-color:rgb(240,100,69)"] {
       border-color: #C6A778 !important;
     }
 
-    #root:has([aria-label="KhaVair special mode"]) [style*="#44231F"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(68, 35, 31)"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(68,35,31)"] {
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color: rgb(68, 35, 31)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color:rgb(68,35,31)"] {
       background-color: rgba(198, 167, 120, .16) !important;
     }
 
-    #root:has([aria-label="KhaVair special mode"]) [style*="#DE466D"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(222, 70, 109)"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(222,70,109)"] {
+    #root:has([aria-label="KhaVair special mode"]) [style*="color: rgb(222, 70, 109)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="color:rgb(222,70,109)"] {
       color: #D08C79 !important;
+    }
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color: rgb(222, 70, 109)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color:rgb(222,70,109)"] {
       background-color: #D08C79 !important;
+    }
+    #root:has([aria-label="KhaVair special mode"]) [style*="border-color: rgb(222, 70, 109)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="border-color:rgb(222,70,109)"] {
       border-color: #D08C79 !important;
     }
 
-    #root:has([aria-label="KhaVair special mode"]) [style*="#2EC5D2"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(46, 197, 210)"],
-    #root:has([aria-label="KhaVair special mode"]) [style*="rgb(46,197,210)"] {
+    #root:has([aria-label="KhaVair special mode"]) [style*="color: rgb(46, 197, 210)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="color:rgb(46,197,210)"] {
       color: #7FA0A6 !important;
+    }
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color: rgb(46, 197, 210)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="background-color:rgb(46,197,210)"] {
       background-color: #7FA0A6 !important;
+    }
+    #root:has([aria-label="KhaVair special mode"]) [style*="border-color: rgb(46, 197, 210)"],
+    #root:has([aria-label="KhaVair special mode"]) [style*="border-color:rgb(46,197,210)"] {
       border-color: #7FA0A6 !important;
     }
   }
