@@ -32,4 +32,10 @@ export type Duty = {
 };
 
 export type PerDiemRegion = 'KZ' | 'ASIA' | 'EU_UK';
-export type PerDiemRule = { region: PerDiemRegion; minimumStationMinutes: number; usdRate: number | null };
+export type PerDiemRule = {
+  region: PerDiemRegion;
+  minimumStationMinutes: number;
+  usdRate: number | null;
+  /** Kazakhstan per diem is defined as a multiple of the annual MRP/MCI. */
+  mrpMultiplier?: number;
+};
