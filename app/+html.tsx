@@ -18,7 +18,7 @@ const PRODUCTION_CSP = [
 
 const APP_SHELL_CSS = `
   html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; touch-action: manipulation; }
-  #root { height: calc(100dvh - 2mm); min-height: calc(100dvh - 2mm); transform: translateY(2mm); }
+  #root { height: calc(100dvh - 2.5mm); min-height: calc(100dvh - 2.5mm); transform: translateY(2.5mm); }
   body { background: #F4F1EC; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
   @media (prefers-color-scheme: dark) { body { background: #11110F; } }
 `;
@@ -40,7 +40,7 @@ const LOCK_ZOOM = `
     }, { passive: false });
     document.addEventListener('keydown', (event) => {
       if ((event.ctrlKey || event.metaKey) && ['+', '-', '=', '0'].includes(event.key)) event.preventDefault();
-    }, { passive: false });
+    });
     let lastTouchEnd = 0;
     document.addEventListener('touchend', (event) => {
       const now = Date.now();
