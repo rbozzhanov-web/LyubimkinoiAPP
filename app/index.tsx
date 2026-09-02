@@ -3,7 +3,7 @@ import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, TextIn
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SalaryCard } from '@/src/components/SalaryCard';
 import { exportRosterCalendar } from '@/src/domain/calendar';
-import type { Duty } from '@/src/domain/types';
+import type { Duty, Sector } from '@/src/domain/types';
 import { verifyLovedModeCode } from '@/src/domain/lovedMode';
 import { DEFAULT_PROFILE } from '@/src/domain/profile';
 import { sumReportedBlockMinutes, sumReportedNightMinutes } from '@/src/domain/layovers';
@@ -27,7 +27,7 @@ export default function IndexScreen() {
   const [unlockError, setUnlockError] = useState(false);
   const [rosters, setRosters] = useState<ParsedAirAstanaRoster[]>([]);
   const [activeMonth, setActiveMonth] = useState<string>();
-  const [selectedDuty, setSelectedDuty] = useState<string>();
+  const [selectedFlight, setSelectedFlight] = useState<string>();
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string>();
 
@@ -39,7 +39,7 @@ export default function IndexScreen() {
 
   const roster = rosters.find((item) => item.period.start === activeMonth) ?? rosters.at(-1);
   const duties = useMemo(() => roster ? rosterToDuties(roster) : [], [roster]);
-  const activeDuty = duties.find((duty) => duty.id === selectedDuty) ?? duties[0];
+  const selectedSector = duties.flatMap((duty) => duty.sectors).find((sector) => sector.id === selectedFlight);
   const cumulativeBlock = sumReportedBlockMinutes(rosters);
   const cumulativeNight = sumReportedNightMinutes(rosters);
 
@@ -65,7 +65,7 @@ export default function IndexScreen() {
       const next = upsertStoredRoster(parsed);
       setRosters(next);
       setActiveMonth(parsed.period.start);
-      setSelectedDuty(undefined);
+      setSelectedFlight(undefined);
       setTab('Roster');
     } catch (error) {
       setImportError(error instanceof Error ? error.message : String(error));
@@ -80,7 +80,7 @@ export default function IndexScreen() {
     const next = rosters[index + direction];
     if (next) {
       setActiveMonth(next.period.start);
-      setSelectedDuty(undefined);
+      setSelectedFlight(undefined);
     }
   };
 
@@ -110,7 +110,7 @@ export default function IndexScreen() {
     clearPayData();
     setRosters([]);
     setActiveMonth(undefined);
-    setSelectedDuty(undefined);
+    setSelectedFlight(undefined);
     setTab('Home');
   };
 
@@ -128,7 +128,7 @@ export default function IndexScreen() {
 
       <View style={styles.viewport}>
         {tab === 'Home' && <Home roster={roster} duties={duties} rosters={rosters} cumulativeBlock={cumulativeBlock} cumulativeNight={cumulativeNight} palette={palette} onImport={importRoster} importing={importing} />}
-        {tab === 'Roster' && <RosterScreen roster={roster} rosters={rosters} duties={duties} activeDuty={activeDuty} palette={palette} importing={importing} error={importError} onImport={importRoster} onSelect={setSelectedDuty} onMonth={changeMonth} />}
+        {tab === 'Roster' && <RosterScreen roster={roster} rosters={rosters} duties={duties} selectedSector={selectedSector} palette={palette} importing={importing} error={importError} onImport={importRoster} onSelect={setSelectedFlight} onMonth={changeMonth} />}
         {tab === 'Money' && <MoneyScreen roster={roster} palette={palette} />}
         {tab === 'More' && <MoreScreen rosters={rosters} palette={palette} onErase={eraseAll} />}
       </View>
@@ -197,9 +197,13 @@ function Home({ roster, duties, rosters, cumulativeBlock, cumulativeNight, palet
   </View>;
 }
 
-function RosterScreen({ roster, rosters, duties, activeDuty, palette, importing, error, onImport, onSelect, onMonth }: { roster?: ParsedAirAstanaRoster; rosters: ParsedAirAstanaRoster[]; duties: Duty[]; activeDuty?: Duty; palette: Palette; importing: boolean; error?: string; onImport: () => void; onSelect: (id: string) => void; onMonth: (direction: -1 | 1) => void }) {
+type FlightRow = { duty: Duty; sector: Sector };
+
+function RosterScreen({ roster, rosters, duties, selectedSector, palette, importing, error, onImport, onSelect, onMonth }: { roster?: ParsedAirAstanaRoster; rosters: ParsedAirAstanaRoster[]; duties: Duty[]; selectedSector?: Sector; palette: Palette; importing: boolean; error?: string; onImport: () => void; onSelect: (id?: string) => void; onMonth: (direction: -1 | 1) => void }) {
   const [calendarState, setCalendarState] = useState<'idle' | 'working' | 'done' | 'error'>('idle');
   const index = roster ? rosters.findIndex((item) => item.period.start === roster.period.start) : -1;
+  const flights = useMemo<FlightRow[]>(() => duties.flatMap((duty) => duty.sectors.map((sector) => ({ duty, sector }))), [duties]);
+  const selectedRow = selectedSector ? flights.find(({ sector }) => sector.id === selectedSector.id) : undefined;
 
   useEffect(() => setCalendarState('idle'), [roster?.period.start]);
 
@@ -241,21 +245,24 @@ function RosterScreen({ roster, rosters, duties, activeDuty, palette, importing,
     {calendarState === 'error' && <Text style={[styles.feedback, { color: palette.rose }]}>Calendar export failed. Nothing was uploaded.</Text>}
     {error && <Text style={[styles.error, { color: palette.rose }]}>{error}</Text>}
 
-    {!roster ? <Privacy palette={palette} /> : <View style={styles.rosterSplit}>
-      <View style={[styles.innerWindow, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-        <FlatList
-          data={duties}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => <Pressable onPress={() => onSelect(item.id)} style={[styles.rosterCard, { backgroundColor: activeDuty?.id === item.id ? palette.accentSoft : palette.surfaceStrong, borderColor: palette.line }]}>
-            <Text style={[styles.label, { color: palette.muted }]}>{item.dateLabel}</Text>
-            <Text style={[styles.rosterRoute, { color: palette.text }]}>{item.sectors[0].departure} → {item.sectors[item.sectors.length - 1].arrival}</Text>
-            <Text style={[styles.meta, { color: palette.muted }]}>Report {item.reportTime} · {item.sectors.map((sector) => sector.flightNumber).join(' · ')}</Text>
-          </Pressable>}
-        />
-      </View>
-      {activeDuty && <DutyDetail duty={activeDuty} palette={palette} />}
+    {!roster ? <Privacy palette={palette} /> : <View style={[styles.innerWindow, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+      <FlatList
+        data={flights}
+        keyExtractor={({ sector }) => sector.id}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        renderItem={({ item: { duty, sector } }) => <Pressable onPress={() => onSelect(sector.id)} style={[styles.rosterCard, { backgroundColor: selectedSector?.id === sector.id ? palette.accentSoft : palette.surfaceStrong, borderColor: palette.line }]} accessibilityLabel={`Open crew for ${sector.flightNumber} ${sector.departure} to ${sector.arrival}`}>
+          <View style={styles.flightCardTop}>
+            <Text style={[styles.label, { color: palette.muted }]}>{duty.dateLabel}</Text>
+            <Text style={[styles.flightNumber, { color: palette.muted }]}>{sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text>
+          </View>
+          <Text style={[styles.rosterRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text>
+          <Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime} · Report {duty.reportTime}</Text>
+        </Pressable>}
+      />
     </View>}
+
+    {selectedRow && <FlightDetail sector={selectedRow.sector} dateLabel={selectedRow.duty.dateLabel} palette={palette} onClose={() => onSelect(undefined)} />}
   </View>;
 }
 
@@ -295,27 +302,39 @@ function MoreScreen({ rosters, palette, onErase }: { rosters: ParsedAirAstanaRos
   </View>;
 }
 
-function DutyDetail({ duty, palette }: { duty: Duty; palette: Palette }) {
-  return <View style={[styles.detailWindow, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
-    <Text style={[styles.cardTitle, { color: palette.text }]}>{duty.dateLabel}</Text>
-    <FlatList
-      data={duty.sectors}
-      keyExtractor={(item) => item.id}
-      contentContainerStyle={{ paddingBottom: 8 }}
-      renderItem={({ item }) => <View style={[styles.sectorBlock, { borderTopColor: palette.line }]}>
-        <View style={styles.sectorHeader}>
-          <Text style={[styles.sectorRoute, { color: palette.text }]}>{item.departure} → {item.arrival}</Text>
-          <Text style={[styles.meta, { color: palette.muted }]}>{item.flightNumber}{item.deadhead ? ' · DHC' : ''}</Text>
+function FlightDetail({ sector, dateLabel, palette, onClose }: { sector: Sector; dateLabel: string; palette: Palette; onClose: () => void }) {
+  return <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+    <View style={styles.sheetBackdrop}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close flight details" />
+      <View style={[styles.flightSheet, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+        <View style={[styles.sheetHandle, { backgroundColor: palette.line }]} />
+        <View style={styles.sheetHeader}>
+          <View style={styles.sheetTitle}>
+            <Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text>
+            <Text style={[styles.sheetRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text>
+            <Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime}</Text>
+          </View>
+          <Pressable onPress={onClose} style={[styles.sheetClose, { backgroundColor: palette.surface, borderColor: palette.line }]} accessibilityLabel="Close">
+            <Text style={[styles.sheetCloseText, { color: palette.text }]}>×</Text>
+          </Pressable>
         </View>
-        <Text style={[styles.meta, { color: palette.muted }]}>{item.departureTime} – {item.arrivalTime}</Text>
-        <Text style={[styles.flyingWith, { color: palette.accent }]}>Flying with · {item.crew.length}</Text>
-        {item.crew.map((member) => <View key={member.id} style={styles.crewRow}>
-          <View style={[styles.avatar, { backgroundColor: palette.accentSoft }]}><Text style={[styles.avatarText, { color: palette.accent }]}>{member.name[0]}</Text></View>
-          <View style={styles.crewText}><Text style={[styles.crewName, { color: palette.text }]}>{member.name}</Text><Text style={[styles.meta, { color: palette.muted }]}>{member.position}</Text></View>
-        </View>)}
-      </View>}
-    />
-  </View>;
+        <Text style={[styles.flyingWith, { color: palette.accent }]}>Flying with · {sector.crew.length}</Text>
+        {sector.crew.length ? <FlatList
+          data={sector.crew}
+          keyExtractor={(member) => member.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.crewList}
+          renderItem={({ item: member }) => <View style={styles.crewRow}>
+            <View style={[styles.avatar, { backgroundColor: palette.accentSoft }]}><Text style={[styles.avatarText, { color: palette.accent }]}>{member.name[0]}</Text></View>
+            <View style={styles.crewText}>
+              <Text style={[styles.crewName, { color: palette.text }]}>{member.name}</Text>
+              <Text style={[styles.meta, { color: palette.muted }]}>{member.position ?? member.rosterRank ?? member.role}</Text>
+            </View>
+          </View>}
+        /> : <Text style={[styles.meta, { color: palette.muted }]}>Crew is not listed for this flight in the imported report.</Text>}
+      </View>
+    </View>
+  </Modal>;
 }
 
 function PrimaryButton({ title, onPress, loading, palette }: { title: string; onPress: () => void; loading: boolean; palette: Palette }) {
@@ -360,21 +379,27 @@ const styles = StyleSheet.create({
   compactText: { fontWeight: '700', fontSize: 12 },
   feedback: { fontSize: 11, lineHeight: 15 },
   error: { fontSize: 12 },
-  rosterSplit: { flex: 1, minHeight: 0, gap: 10 },
-  innerWindow: { flex: 1, minHeight: 100, borderWidth: 1, borderRadius: 20, overflow: 'hidden' },
-  detailWindow: { flex: 1.2, minHeight: 0, borderWidth: 1, borderRadius: 20, padding: 14, overflow: 'hidden' },
-  listContent: { padding: 8, gap: 7 },
+  innerWindow: { flex: 1, minHeight: 0, borderWidth: 1, borderRadius: 20, overflow: 'hidden' },
+  listContent: { padding: 8, gap: 7, paddingBottom: 18 },
   rosterCard: { borderWidth: 1, borderRadius: 16, padding: 13 },
+  flightCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  flightNumber: { fontSize: 11, fontWeight: '700' },
   rosterRoute: { fontSize: 20, fontWeight: '700', marginTop: 4 },
-  sectorBlock: { borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 12 },
-  sectorHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sectorRoute: { fontSize: 19, fontWeight: '700' },
-  flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 9, marginBottom: 4 },
-  crewRow: { minHeight: 42, flexDirection: 'row', alignItems: 'center' },
-  crewText: { flex: 1 },
-  avatar: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 9 },
-  avatarText: { fontSize: 11, fontWeight: '800' },
-  crewName: { fontSize: 13, fontWeight: '600' },
+  flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 14, marginBottom: 7 },
+  crewList: { paddingBottom: 12 },
+  crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' },
+  crewText: { flex: 1, minWidth: 0 },
+  avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 },
+  avatarText: { fontSize: 12, fontWeight: '800' },
+  crewName: { fontSize: 14, fontWeight: '600' },
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end', paddingHorizontal: 10, paddingBottom: 10 },
+  flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderWidth: 1, borderRadius: 28, paddingHorizontal: 18, paddingTop: 9, paddingBottom: 12, overflow: 'hidden' },
+  sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 },
+  sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  sheetTitle: { flex: 1, minWidth: 0 },
+  sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 },
+  sheetClose: { width: 44, height: 44, borderWidth: 1, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  sheetCloseText: { fontSize: 27, lineHeight: 29, fontWeight: '300', marginTop: -2 },
   moneyHint: { borderWidth: 1, borderRadius: 20, padding: 14 },
   secondaryButton: { height: 48, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { fontWeight: '600' },
