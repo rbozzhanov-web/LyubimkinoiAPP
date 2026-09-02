@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, FlatList, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SalaryCard } from './SalaryCard';
 import { SalarySettingsSheet } from './SalarySettingsSheet';
@@ -26,7 +26,15 @@ type RosterDuty = { roster: ParsedAirAstanaRoster; duty: Duty };
 type FocusDuty = RosterDuty & { reportMs: number; releaseMs: number };
 
 export default function MainScreen() {
-  const dark = useColorScheme() === 'dark';
+  // The web build is prerendered to static HTML with the light palette baked into inline
+  // styles. React does not repaint attributes it accepted during hydration, so if the very
+  // first client render already said "dark", the page keeps the server's light background
+  // for good and only later-mounted subtrees turn dark. Render light once to match the
+  // server, then switch: the palette then differs between renders and React patches it.
+  const scheme = useColorScheme();
+  const [hydrated, setHydrated] = useState(Platform.OS !== 'web');
+  useEffect(() => { if (!hydrated) setHydrated(true); }, [hydrated]);
+  const dark = hydrated && scheme === 'dark';
   const [tab, setTab] = useState<Tab>('Home');
   const [lovedMode, setLovedMode] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
@@ -56,12 +64,12 @@ export default function MainScreen() {
     surface: lovedMode ? (dark ? '#24171A' : '#FFF7F2') : (dark ? '#1B1A18' : '#FCFAF7'),
     surfaceStrong: lovedMode ? (dark ? '#2C1B20' : '#FFFFFF') : (dark ? '#25231F' : '#FFFFFF'),
     text: lovedMode ? (dark ? '#FFF5F2' : '#2B1718') : (dark ? '#F7F4EF' : '#171714'),
-    muted: lovedMode ? (dark ? '#D3A69F' : '#8A5C56') : (dark ? '#AAA49A' : '#747067'),
-    line: lovedMode ? (dark ? '#513037' : '#F3C1B2') : (dark ? '#302E29' : '#E7E1D8'),
+    muted: lovedMode ? (dark ? '#DCB2AB' : '#7A4A45') : (dark ? '#B5AFA4' : '#5F5C55'),
+    line: lovedMode ? (dark ? '#5A363E' : '#EFB4A3') : (dark ? '#37342E' : '#DED7CB'),
     accent: lovedMode ? '#F06445' : (dark ? '#C7BDAE' : '#2F3934'),
     accentSoft: lovedMode ? (dark ? '#44231F' : '#FFD8C9') : (dark ? '#222925' : '#E6ECE8'),
     rose: lovedMode ? '#DE466D' : (dark ? '#C7BDAE' : '#2F3934'),
-    aqua: lovedMode ? '#2EC5D2' : (dark ? '#AAA49A' : '#747067'),
+    aqua: lovedMode ? '#2EC5D2' : (dark ? '#B5AFA4' : '#5F5C55'),
   }), [dark, lovedMode]);
 
   const importRoster = async () => {
@@ -176,7 +184,8 @@ export default function MainScreen() {
 
 function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing }: { allDuties: RosterDuty[]; fallbackRoster?: ParsedAirAstanaRoster; rosters: ParsedAirAstanaRoster[]; palette: Palette; onImport: () => void; importing: boolean }) {
   const now = useNow();
-  const focus = useMemo(() => pickFocusDuty(allDuties, now), [allDuties, now]);
+  const timeline = useMemo(() => timedDuties(allDuties), [allDuties]);
+  const focus = useMemo(() => pickFocusDuty(timeline, now), [timeline, now]);
   const roster = focus?.roster ?? fallbackRoster;
   const duty = focus?.duty;
 
@@ -193,36 +202,70 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
   const isUpcoming = reportMs !== undefined && reportMs > now;
   const isActive = reportMs !== undefined && releaseMs !== undefined && reportMs <= now && releaseMs >= now;
   const countdown = reportMs === undefined ? undefined : isUpcoming ? formatCountdown(reportMs - now) : isActive ? formatCountdown(now - reportMs) : undefined;
+  // Duty length is the one span the roster does not print but a reader always wants.
+  // A misread midnight crossing can put release before report; show nothing rather than
+  // a negative clock reading.
+  const spanMinutes = reportMs !== undefined && releaseMs !== undefined ? Math.round((releaseMs - reportMs) / 60000) : undefined;
+  const dutyMinutes = spanMinutes !== undefined && spanMinutes > 0 ? spanMinutes : undefined;
+
   const year = roster.period.start.slice(0, 4);
   const yearRosters = rosters.filter((item) => item.period.start.startsWith(`${year}-`));
-  const yearBlock = sumReportedBlockMinutes(yearRosters);
-  const yearNight = sumReportedNightMinutes(yearRosters);
+  const block = roster.totals.blockMinutes;
+  const night = roster.totals.nightMinutes;
+  const nightShare = block && night !== undefined ? Math.round((night / block) * 100) : undefined;
+
+  // The duties either side of the focus, so the screen answers "and then what?".
+  const neighbours = adjacentDuties(timeline, focus, isUpcoming || isActive, 6);
 
   return <View style={styles.screen}>
-    <Text style={[styles.label, { color: palette.muted }]}>{isUpcoming ? 'NEXT DUTY' : isActive ? 'CURRENT DUTY' : 'LATEST DUTY'} · {duty.dateLabel}</Text>
+    <View style={styles.dutyHead}>
+      <Text style={[styles.label, { color: isActive ? palette.accent : palette.muted }]}>{isUpcoming ? 'NEXT DUTY' : isActive ? 'ON DUTY NOW' : 'LATEST DUTY'}</Text>
+      <Text style={[styles.label, { color: palette.muted }]}>{duty.dateLabel}</Text>
+    </View>
+
     <View style={[styles.heroCard, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
-      <View style={styles.heroTop}>
-        <View style={styles.grow}>
-          <Text style={[styles.label, { color: palette.accent }]}>REPORTING</Text>
-          <Text style={[styles.reportTime, { color: palette.text }]}>{duty.reportTime}</Text>
-        </View>
-        {countdown && <View style={[styles.countdownBox, { backgroundColor: palette.accentSoft }]}><Text style={[styles.countdown, { color: palette.accent }]}>{countdown}</Text><Text style={[styles.countdownLabel, { color: palette.muted }]}>{isUpcoming ? 'TO REPORTING' : 'SINCE REPORTING'}</Text></View>}
-      </View>
-
       <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.heroRoute, { color: palette.text }]}>{routeChain(duty)}</Text>
-      <Text style={[styles.heroFlight, { color: palette.muted }]}>{duty.sectors.map((sector) => sector.flightNumber).join(' · ')}</Text>
-      <View style={[styles.timeDivider, { backgroundColor: palette.line }]} />
-      <View style={styles.timeRow}>
-        <TimeMetric label={`DEPARTURE · ${first.departure}`} value={first.departureTime} size="large" palette={palette} />
-        <TimeMetric label={`ARRIVAL · ${last.arrival}`} value={last.arrivalTime} size="medium" palette={palette} />
-        <TimeMetric label="RELEASE" value={duty.releaseTime} size="small" palette={palette} />
+      <View style={[styles.heroMetaRow, countdown ? styles.heroMetaRowTall : undefined]}>
+        <Text numberOfLines={1} style={[styles.heroFlight, { color: palette.muted }]}>{duty.sectors.map((sector) => sector.flightNumber).join(' · ')}</Text>
+        {countdown && <View style={[styles.countdownPill, { backgroundColor: palette.accentSoft }]}>
+          <Text style={[styles.countdown, { color: palette.accent }]}>{countdown}</Text>
+          <Text style={[styles.countdownLabel, { color: palette.accent }]}>{isUpcoming ? 'TO REPORT' : 'ON DUTY'}</Text>
+        </View>}
       </View>
+
+      <View style={[styles.timeDivider, { backgroundColor: palette.line }]} />
+
+      {/* Four readings of one duty: same size, told apart by their labels rather than by scale. */}
+      <View style={styles.timeRow}>
+        <TimeCell label="REPORT" value={duty.reportTime} palette={palette} />
+        <TimeCell label={`DEP · ${first.departure}`} value={first.departureTime} palette={palette} />
+        <TimeCell label={`ARR · ${last.arrival}`} value={last.arrivalTime} palette={palette} />
+        <TimeCell label="RELEASE" value={duty.releaseTime} palette={palette} />
+      </View>
+
+      <Text style={[styles.heroFoot, { color: palette.muted }]}>
+        {dutyMinutes !== undefined ? `Duty ${formatMinutes(dutyMinutes)} · ` : ''}{duty.sectors.length} sector{duty.sectors.length === 1 ? '' : 's'}
+      </Text>
     </View>
 
+    <Text style={[styles.label, { color: palette.muted }]}>{rosterMonthLabel(roster)}</Text>
     <View style={styles.summaryRow}>
-      <Summary title="THIS MONTH" value={formatMinutes(roster.totals.blockMinutes)} detail={`Night ${formatMinutes(roster.totals.nightMinutes)} · ${operatingCount(roster)} sectors`} palette={palette} />
-      <Summary title={`${year} TOTAL`} value={formatMinutes(yearBlock)} detail={`Night ${formatMinutes(yearNight)} · ${yearRosters.length} imported month${yearRosters.length === 1 ? '' : 's'}`} palette={palette} />
+      <Summary title="BLOCK HOURS" value={formatMinutes(block)} detail={`${operatingCount(roster)} sectors flown`} palette={palette} />
+      <Summary title="NIGHT HOURS" value={formatMinutes(night)} detail={nightShare === undefined ? 'reported by the roster' : `${nightShare}% of block time`} palette={palette} />
     </View>
+    {yearRosters.length > 1 && <Text style={[styles.meta, { color: palette.muted }]}>
+      {year} to date · {formatMinutes(sumReportedBlockMinutes(yearRosters))} block · {formatMinutes(sumReportedNightMinutes(yearRosters))} night · {yearRosters.length} months imported
+    </Text>}
+
+    {neighbours.length > 0 && <View style={styles.upNext}>
+      <Text style={[styles.label, { color: palette.muted }]}>{isUpcoming || isActive ? 'THEN' : 'BEFORE THAT'}</Text>
+      <FlatList data={neighbours} keyExtractor={(item) => item.duty.id} showsVerticalScrollIndicator={false} style={styles.upNextList}
+        renderItem={({ item }) => <View style={[styles.upNextRow, { borderColor: palette.line }]}>
+          <Text style={[styles.upNextDate, { color: palette.muted }]}>{item.duty.dateLabel}</Text>
+          <Text numberOfLines={1} style={[styles.upNextRoute, { color: palette.text }]}>{routeChain(item.duty)}</Text>
+          <Text style={[styles.upNextTime, { color: palette.muted }]}>{item.duty.reportTime}</Text>
+        </View>} />
+    </View>}
   </View>;
 }
 
@@ -307,8 +350,9 @@ function useNow(): number {
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   return now;
 }
-function pickFocusDuty(items: RosterDuty[], now: number): FocusDuty | undefined {
-  const timed = items.flatMap((item) => {
+/** Every duty that can be placed on a real clock, in report order. */
+function timedDuties(items: RosterDuty[]): FocusDuty[] {
+  return items.flatMap((item) => {
     const duty = item.duty;
     if (!duty.date || !duty.sectors.length) return [];
     const first = duty.sectors[0];
@@ -316,12 +360,25 @@ function pickFocusDuty(items: RosterDuty[], now: number): FocusDuty | undefined 
     const reportMs = stationLocalDateTimeMs(first.departure, duty.reportDate ?? duty.date, duty.reportTime);
     const releaseMs = stationLocalDateTimeMs(last.arrival, duty.releaseDate ?? duty.date, duty.releaseTime);
     return reportMs === undefined || releaseMs === undefined ? [] : [{ ...item, reportMs, releaseMs }];
-  });
+  }).sort((a, b) => a.reportMs - b.reportMs);
+}
+
+function pickFocusDuty(timed: FocusDuty[], now: number): FocusDuty | undefined {
   const active = timed.filter((item) => item.reportMs <= now && item.releaseMs >= now).sort((a, b) => b.reportMs - a.reportMs)[0];
   if (active) return active;
-  const upcoming = timed.filter((item) => item.reportMs > now).sort((a, b) => a.reportMs - b.reportMs)[0];
+  const upcoming = timed.find((item) => item.reportMs > now);
   if (upcoming) return upcoming;
-  return timed.sort((a, b) => b.releaseMs - a.releaseMs)[0];
+  return timed[timed.length - 1];
+}
+
+/** The duties just after the focus when it is ahead of us, just before it when it is behind. */
+function adjacentDuties(timed: FocusDuty[], focus: FocusDuty | undefined, forward: boolean, count = 3): FocusDuty[] {
+  if (!focus) return [];
+  const index = timed.findIndex((item) => item.duty.id === focus.duty.id);
+  if (index < 0) return [];
+  return forward
+    ? timed.slice(index + 1, index + 1 + count)
+    : timed.slice(Math.max(0, index - count), index).reverse();
 }
 function formatCountdown(milliseconds: number): string {
   const total = Math.max(0, Math.floor(milliseconds / 1000));
@@ -330,7 +387,7 @@ function formatCountdown(milliseconds: number): string {
   return days > 0 ? `${days}d ${clock}` : clock;
 }
 function routeChain(duty: Duty): string { return [duty.sectors[0]?.departure, ...duty.sectors.map((sector) => sector.arrival)].filter(Boolean).join(' → '); }
-function TimeMetric({ label, value, size, palette }: { label: string; value: string; size: 'large'|'medium'|'small'; palette: Palette }) { return <View style={styles.timeMetric}><Text style={[styles.timeLabel, { color: palette.muted }]}>{label}</Text><Text style={[size === 'large' ? styles.departureTime : size === 'medium' ? styles.arrivalTime : styles.releaseTime, { color: palette.text }]}>{value}</Text></View>; }
+function TimeCell({ label, value, palette }: { label: string; value: string; palette: Palette }) { return <View style={styles.timeCell}><Text numberOfLines={1} style={[styles.timeLabel, { color: palette.muted }]}>{label}</Text><Text style={[styles.timeValue, { color: palette.text }]}>{value}</Text></View>; }
 function PrimaryButton({ title, onPress, loading, palette }: { title: string; onPress: () => void; loading: boolean; palette: Palette }) { return <Pressable onPress={onPress} disabled={loading} style={[styles.primaryButton, { backgroundColor: palette.accent }]}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionText}>{title}</Text>}</Pressable>; }
 function Summary({ title, value, detail, palette }: { title: string; value: string; detail: string; palette: Palette }) { return <View style={[styles.summary, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.label, { color: palette.muted }]}>{title}</Text><Text style={[styles.summaryValue, { color: palette.text }]}>{value}</Text><Text style={[styles.meta, { color: palette.muted }]}>{detail}</Text></View>; }
 function InfoCard({ title, children, palette }: { title: string; children: React.ReactNode; palette: Palette }) { return <View style={[styles.infoCard, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}><Text style={[styles.cardTitle, { color: palette.text }]}>{title}</Text>{children}</View>; }
@@ -338,21 +395,28 @@ function operatingCount(roster: ParsedAirAstanaRoster) { return roster.sectors.f
 
 const styles = StyleSheet.create({
   safe: { flex: 1 }, app: { flex: 1, width: '100%', maxWidth: 620, alignSelf: 'center', paddingHorizontal: 16 },
-  header: { height: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, brand: { fontSize: 27, fontWeight: '700', letterSpacing: -.8 }, kicker: { fontSize: 9, fontWeight: '700', letterSpacing: 1.35 },
+  header: { height: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, brand: { fontSize: 27, fontWeight: '700', letterSpacing: -.8 }, kicker: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
   modeButton: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }, modeGlyph: { fontSize: 19 },
   viewport: { flex: 1, minHeight: 0 }, screen: { flex: 1, paddingTop: 8, gap: 12 }, grow: { flex: 1, minWidth: 0 },
-  sectionTitle: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.8 }, intro: { fontSize: 15, lineHeight: 22 }, label: { fontSize: 10, fontWeight: '700', letterSpacing: 1.05 }, meta: { fontSize: 12, lineHeight: 17 },
-  heroCard: { borderWidth: 1, borderRadius: 26, padding: 18 }, heroTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, reportTime: { fontSize: 52, lineHeight: 57, fontWeight: '800', letterSpacing: -2.2, marginTop: 2 },
-  countdownBox: { minWidth: 122, borderRadius: 17, paddingHorizontal: 11, paddingVertical: 9, alignItems: 'flex-end' }, countdown: { fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'] }, countdownLabel: { fontSize: 8, fontWeight: '700', letterSpacing: .7, marginTop: 2 },
-  heroRoute: { fontSize: 29, lineHeight: 34, fontWeight: '700', marginTop: 11 }, heroFlight: { fontSize: 11, fontWeight: '600', marginTop: 2 }, timeDivider: { height: StyleSheet.hairlineWidth, marginVertical: 14 },
-  timeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 }, timeMetric: { flex: 1, minWidth: 0 }, timeLabel: { fontSize: 8, lineHeight: 11, fontWeight: '700', letterSpacing: .6 }, departureTime: { fontSize: 30, lineHeight: 34, fontWeight: '700', marginTop: 2 }, arrivalTime: { fontSize: 24, lineHeight: 29, fontWeight: '700', marginTop: 2 }, releaseTime: { fontSize: 19, lineHeight: 24, fontWeight: '600', marginTop: 2 },
-  summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14, minHeight: 112 }, summaryValue: { fontSize: 25, fontWeight: '700', marginTop: 8 },
+  sectionTitle: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.8 }, intro: { fontSize: 15, lineHeight: 22 }, label: { fontSize: 11, fontWeight: '700', letterSpacing: .9 }, meta: { fontSize: 13, lineHeight: 18 },
+  dutyHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  heroCard: { borderWidth: 1, borderRadius: 26, padding: 18 },
+  heroRoute: { fontSize: 36, lineHeight: 42, fontWeight: '700', letterSpacing: -1 },
+  heroMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }, heroMetaRowTall: { minHeight: 44 }, heroFlight: { flex: 1, fontSize: 13, fontWeight: '600' },
+  countdownPill: { borderRadius: 15, paddingHorizontal: 12, paddingVertical: 6, alignItems: 'center' }, countdown: { fontSize: 18, fontWeight: '800', fontVariant: ['tabular-nums'] }, countdownLabel: { fontSize: 10, fontWeight: '700', letterSpacing: .7, marginTop: 1 },
+  timeDivider: { height: StyleSheet.hairlineWidth, marginVertical: 14 },
+  timeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 }, timeCell: { flex: 1, minWidth: 0 },
+  timeLabel: { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: .3 }, timeValue: { fontSize: 22, lineHeight: 27, fontWeight: '700', marginTop: 3, fontVariant: ['tabular-nums'] },
+  heroFoot: { fontSize: 13, fontWeight: '600', marginTop: 14 },
+  summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14 }, summaryValue: { fontSize: 28, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] },
+  upNext: { flex: 1, minHeight: 0, gap: 2 }, upNextList: { flex: 1 }, upNextRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
+  upNextDate: { fontSize: 12, fontWeight: '700', letterSpacing: .4, width: 54 }, upNextRoute: { flex: 1, fontSize: 15, fontWeight: '600' }, upNextTime: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
   primaryButton: { height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }, actionText: { color: '#fff', fontWeight: '700' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, titleActions: { flexDirection: 'row', gap: 7 }, compactButton: { height: 38, minWidth: 72, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 }, compactText: { fontWeight: '700', fontSize: 12 },
   monthNav: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, monthNavText: { fontSize: 12, fontWeight: '600' }, error: { fontSize: 12 },
   emptyCard: { borderWidth: 1, borderRadius: 20, padding: 14 }, innerWindow: { flex: 1, minHeight: 0, borderWidth: 1, borderRadius: 20, overflow: 'hidden' }, listContent: { padding: 8, gap: 7, paddingBottom: 18 }, rosterCard: { borderWidth: 1, borderRadius: 16, padding: 13 }, flightCardTop: { flexDirection: 'row', justifyContent: 'space-between' }, flightNumber: { fontSize: 11, fontWeight: '700' }, rosterRoute: { fontSize: 20, fontWeight: '700', marginTop: 4 },
   infoCard: { borderWidth: 1, borderRadius: 20, padding: 14, gap: 3 }, cardTitle: { fontSize: 15, fontWeight: '700' }, settingsCard: { minHeight: 68, borderWidth: 1, borderRadius: 20, padding: 14, flexDirection: 'row', alignItems: 'center' }, chevron: { fontSize: 30 }, secondaryButton: { height: 48, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, secondaryText: { fontWeight: '600' },
-  tabBar: { height: 68, marginTop: 8, marginBottom: 4, borderWidth: 1, borderRadius: 22, flexDirection: 'row' }, tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabIconWrap: { minWidth: 35, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, tabIcon: { fontSize: 18, lineHeight: 21, fontWeight: '700' }, tabText: { fontSize: 10, fontWeight: '600' },
+  tabBar: { height: 68, marginTop: 8, marginBottom: 4, borderWidth: 1, borderRadius: 22, flexDirection: 'row' }, tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabIconWrap: { minWidth: 35, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, tabIcon: { fontSize: 19, lineHeight: 22, fontWeight: '700' }, tabText: { fontSize: 11, fontWeight: '600' },
   sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end', paddingHorizontal: 10, paddingBottom: 10 }, flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderWidth: 1, borderRadius: 28, paddingHorizontal: 18, paddingTop: 9, paddingBottom: 12, overflow: 'hidden' }, sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }, sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 }, sheetClose: { width: 44, height: 44, borderWidth: 1, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }, sheetCloseText: { fontSize: 27 }, swipeHint: { fontSize: 10, marginTop: 7 }, flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 7 }, crewList: { paddingBottom: 12 }, crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' }, avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, avatarText: { fontSize: 12, fontWeight: '800' }, crewName: { fontSize: 14, fontWeight: '600' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.46)', alignItems: 'center', justifyContent: 'center', padding: 20 }, unlockCard: { width: '100%', maxWidth: 390, borderWidth: 1, borderRadius: 26, padding: 20 }, unlockTitle: { fontSize: 26, fontWeight: '700', marginTop: 7 }, codeInput: { height: 54, borderWidth: 1, borderRadius: 15, marginTop: 18, paddingHorizontal: 16, fontSize: 22, letterSpacing: 5, textAlign: 'center' }, codeHint: { fontSize: 11, marginTop: 6 }, actions: { flexDirection: 'row', gap: 9, marginTop: 18 }, action: { flex: 1, height: 46, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
 });
