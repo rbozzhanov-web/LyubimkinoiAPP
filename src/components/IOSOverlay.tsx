@@ -32,9 +32,9 @@ type DialogProps = {
   dismissOnBackdrop?: boolean;
 };
 
-const SPRING = { stiffness: 315, damping: 32, mass: 0.88, useNativeDriver: true } as const;
+const SPRING = { stiffness: 300, damping: 31, mass: 0.9, useNativeDriver: true } as const;
 const WEB_GLASS = Platform.OS === 'web'
-  ? ({ backdropFilter: 'blur(24px) saturate(1.22)', WebkitBackdropFilter: 'blur(24px) saturate(1.22)' } as any)
+  ? ({ backdropFilter: 'blur(18px) saturate(1.18)', WebkitBackdropFilter: 'blur(18px) saturate(1.18)' } as any)
   : undefined;
 const WEB_TRANSFORM_LAYER = Platform.OS === 'web'
   ? ({ willChange: 'transform', backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' } as any)
@@ -57,14 +57,14 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
     Animated.parallel([
       Animated.timing(presentation, {
         toValue: 0,
-        duration: 180,
-        easing: Easing.out(Easing.cubic),
+        duration: 205,
+        easing: Easing.bezier(0.32, 0.72, 0, 1),
         useNativeDriver: true,
         isInteraction: false,
       }),
       Animated.timing(dragY, {
         toValue: distance,
-        duration: 225,
+        duration: 235,
         easing: Easing.bezier(0.32, 0.72, 0, 1),
         useNativeDriver: true,
         isInteraction: false,
@@ -98,7 +98,7 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
   }, [dragY, mounted, presentation, visible]);
 
   const responder = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_, gesture) => gesture.dy > 2 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.1,
+    onMoveShouldSetPanResponder: (_, gesture) => gesture.dy > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.15,
     onPanResponderGrant: () => dragY.stopAnimation(),
     onPanResponderMove: (_, gesture) => {
       const raw = Math.max(0, gesture.dy);
@@ -106,9 +106,9 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
       dragY.setValue(resisted);
     },
     onPanResponderRelease: (_, gesture) => {
-      const fast = gesture.dy > 22 && gesture.vy > 0.72;
-      if (gesture.dy > 86 || fast) dismiss();
-      else Animated.spring(dragY, { toValue: 0, ...SPRING, isInteraction: false }).start();
+      const fast = gesture.dy > 20 && gesture.vy > 0.68;
+      if (gesture.dy > 82 || fast) dismiss();
+      else Animated.spring(dragY, { toValue: 0, ...SPRING, velocity: gesture.vy, isInteraction: false }).start();
     },
     onPanResponderTerminate: () => Animated.spring(dragY, { toValue: 0, ...SPRING, isInteraction: false }).start(),
     onPanResponderTerminationRequest: () => true,
@@ -116,10 +116,10 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
 
   if (!mounted) return null;
 
-  const introY = presentation.interpolate({ inputRange: [0, 1], outputRange: [34, 0] });
+  const introY = presentation.interpolate({ inputRange: [0, 1], outputRange: [24, 0] });
   const translateY = Animated.add(introY, dragY);
   const baseDim = presentation.interpolate({
-    inputRange: [0, 0.2, 1],
+    inputRange: [0, 0.28, 1],
     outputRange: [0, backdropOpacity, backdropOpacity],
     extrapolate: 'clamp',
   });
@@ -139,10 +139,12 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
           onLayout={(event) => { sheetHeight.current = event.nativeEvent.layout.height; }}
           style={[styles.sheetBase, WEB_GLASS, style]}
         >
-          <View style={styles.grabberTouch} {...responder.panHandlers}>
-            <View style={[styles.grabber, { backgroundColor: handleColor }]} />
+          <View style={styles.sheetInteraction} {...responder.panHandlers}>
+            <View style={styles.grabberTouch}>
+              <View style={[styles.grabber, { backgroundColor: handleColor }]} />
+            </View>
+            {content}
           </View>
-          {content}
         </View>
       </Animated.View>
     </View>
@@ -217,11 +219,12 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.18,
-    shadowRadius: 28,
+    shadowOpacity: 0.16,
+    shadowRadius: 26,
     elevation: 24,
   },
+  sheetInteraction: { minHeight: 0 },
   grabberTouch: { height: 28, alignItems: 'center', justifyContent: 'center' },
-  grabber: { width: 36, height: 5, borderRadius: 3, opacity: 0.72 },
+  grabber: { width: 36, height: 5, borderRadius: 3, opacity: 0.66 },
   dialogHost: { alignItems: 'center', justifyContent: 'center', padding: 20 },
 });
