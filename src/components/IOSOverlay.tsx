@@ -32,12 +32,12 @@ type DialogProps = {
   dismissOnBackdrop?: boolean;
 };
 
-const SPRING = { stiffness: 360, damping: 34, mass: 0.82, useNativeDriver: true } as const;
+const SPRING = { stiffness: 315, damping: 32, mass: 0.88, useNativeDriver: true } as const;
 const WEB_GLASS = Platform.OS === 'web'
   ? ({ backdropFilter: 'blur(24px) saturate(1.22)', WebkitBackdropFilter: 'blur(24px) saturate(1.22)' } as any)
   : undefined;
 const WEB_TRANSFORM_LAYER = Platform.OS === 'web'
-  ? ({ willChange: 'transform', backfaceVisibility: 'hidden' } as any)
+  ? ({ willChange: 'transform', backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' } as any)
   : undefined;
 const WEB_OPACITY_LAYER = Platform.OS === 'web'
   ? ({ willChange: 'opacity' } as any)
@@ -57,15 +57,17 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
     Animated.parallel([
       Animated.timing(presentation, {
         toValue: 0,
-        duration: 190,
+        duration: 180,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
+        isInteraction: false,
       }),
       Animated.timing(dragY, {
         toValue: distance,
-        duration: 210,
+        duration: 225,
         easing: Easing.bezier(0.32, 0.72, 0, 1),
         useNativeDriver: true,
+        isInteraction: false,
       }),
     ]).start(() => {
       setMounted(false);
@@ -90,7 +92,9 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
     dragY.stopAnimation();
     presentation.setValue(0);
     dragY.setValue(0);
-    Animated.spring(presentation, { toValue: 1, ...SPRING }).start();
+    requestAnimationFrame(() => {
+      Animated.spring(presentation, { toValue: 1, ...SPRING, isInteraction: false }).start();
+    });
   }, [dragY, mounted, presentation, visible]);
 
   const responder = useMemo(() => PanResponder.create({
@@ -104,18 +108,18 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
     onPanResponderRelease: (_, gesture) => {
       const fast = gesture.dy > 22 && gesture.vy > 0.72;
       if (gesture.dy > 86 || fast) dismiss();
-      else Animated.spring(dragY, { toValue: 0, ...SPRING }).start();
+      else Animated.spring(dragY, { toValue: 0, ...SPRING, isInteraction: false }).start();
     },
-    onPanResponderTerminate: () => Animated.spring(dragY, { toValue: 0, ...SPRING }).start(),
+    onPanResponderTerminate: () => Animated.spring(dragY, { toValue: 0, ...SPRING, isInteraction: false }).start(),
     onPanResponderTerminationRequest: () => true,
   }), [dismiss, dragY]);
 
   if (!mounted) return null;
 
-  const introY = presentation.interpolate({ inputRange: [0, 1], outputRange: [28, 0] });
+  const introY = presentation.interpolate({ inputRange: [0, 1], outputRange: [34, 0] });
   const translateY = Animated.add(introY, dragY);
   const baseDim = presentation.interpolate({
-    inputRange: [0, 0.18, 1],
+    inputRange: [0, 0.2, 1],
     outputRange: [0, backdropOpacity, backdropOpacity],
     extrapolate: 'clamp',
   });
@@ -129,13 +133,17 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
       <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close overlay" />
       <Animated.View
         accessibilityViewIsModal
-        onLayout={(event) => { sheetHeight.current = event.nativeEvent.layout.height; }}
-        style={[styles.sheetBase, WEB_GLASS, WEB_TRANSFORM_LAYER, style, { transform: [{ translateY }] }]}
+        style={[styles.sheetMotion, WEB_TRANSFORM_LAYER, { transform: [{ translateY }] }]}
       >
-        <View style={styles.grabberTouch} {...responder.panHandlers}>
-          <View style={[styles.grabber, { backgroundColor: handleColor }]} />
+        <View
+          onLayout={(event) => { sheetHeight.current = event.nativeEvent.layout.height; }}
+          style={[styles.sheetBase, WEB_GLASS, style]}
+        >
+          <View style={styles.grabberTouch} {...responder.panHandlers}>
+            <View style={[styles.grabber, { backgroundColor: handleColor }]} />
+          </View>
+          {content}
         </View>
-        {content}
       </Animated.View>
     </View>
   </Modal>;
@@ -154,6 +162,7 @@ export function IOSDialog({ visible, onClose, children, style, backdropOpacity =
       duration: 155,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
+      isInteraction: false,
     }).start(() => {
       setMounted(false);
       if (notify) onClose();
@@ -175,7 +184,7 @@ export function IOSDialog({ visible, onClose, children, style, backdropOpacity =
     if (!mounted || !visible || closing.current) return;
     presentation.stopAnimation();
     presentation.setValue(0);
-    Animated.spring(presentation, { toValue: 1, stiffness: 420, damping: 32, mass: 0.72, useNativeDriver: true }).start();
+    Animated.spring(presentation, { toValue: 1, stiffness: 420, damping: 32, mass: 0.72, useNativeDriver: true, isInteraction: false }).start();
   }, [mounted, presentation, visible]);
 
   if (!mounted) return null;
@@ -199,6 +208,10 @@ export function IOSDialog({ visible, onClose, children, style, backdropOpacity =
 const styles = StyleSheet.create({
   fill: { flex: 1, justifyContent: 'flex-end' },
   dim: { backgroundColor: '#000' },
+  sheetMotion: {
+    width: '100%',
+    alignSelf: 'center',
+  },
   sheetBase: {
     width: '100%',
     alignSelf: 'center',
