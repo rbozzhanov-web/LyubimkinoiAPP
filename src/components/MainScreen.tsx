@@ -381,18 +381,35 @@ function MoreScreen({ rosters, palette, onErase, onSalarySettings }: { rosters: 
 }
 
 function FlightDetail({ sector, dateLabel, palette, onClose, onPrevious, onNext }: { sector: Sector; dateLabel: string; palette: Palette; onClose: () => void; onPrevious?: () => void; onNext?: () => void }) {
+  const [scrollAtTop, setScrollAtTop] = useState(true);
+  useEffect(() => setScrollAtTop(true), [sector.id]);
+
   return <IOSSheet
     visible
     onClose={onClose}
     handleColor={palette.line}
     backdropOpacity={0.42}
+    scrollAtTop={scrollAtTop}
     style={[styles.flightSheet, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
   >
     <SwipeSurface style={styles.flightSheetContent} onSwipeLeft={onNext} onSwipeRight={onPrevious} threshold={44}>
       <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text><Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime}</Text></View></View>
       <Text style={[styles.swipeHint, { color: palette.muted }]}>{onPrevious ? '‹ ' : ''}swipe flight{onNext ? ' ›' : ''} · swipe down to close</Text>
       <Text style={[styles.flyingWith, { color: palette.accent }]}>Flying with · {sector.crew.length}</Text>
-      {sector.crew.length ? <FlatList data={sector.crew} keyExtractor={(member) => member.id} style={styles.crewScroll} nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={styles.crewList} initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5} renderItem={({ item }) => <View style={styles.crewRow}><View style={[styles.avatar, { backgroundColor: palette.accentSoft }]}><Text style={[styles.avatarText, { color: palette.accent }]}>{item.name[0]}</Text></View><View style={styles.grow}><Text style={[styles.crewName, { color: palette.text }]}>{item.name}</Text><Text style={[styles.meta, { color: palette.muted }]}>{item.position ?? item.rosterRank ?? item.role}</Text></View></View>} /> : <Text style={[styles.meta, { color: palette.muted }]}>Crew is not listed for this flight in the imported report.</Text>}
+      {sector.crew.length ? <FlatList
+        data={sector.crew}
+        keyExtractor={(member) => member.id}
+        style={styles.crewScroll}
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.crewList}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={5}
+        scrollEventThrottle={16}
+        onScroll={(event) => setScrollAtTop(event.nativeEvent.contentOffset.y <= 1)}
+        renderItem={({ item }) => <View style={styles.crewRow}><View style={[styles.avatar, { backgroundColor: palette.accentSoft }]}><Text style={[styles.avatarText, { color: palette.accent }]}>{item.name[0]}</Text></View><View style={styles.grow}><Text style={[styles.crewName, { color: palette.text }]}>{item.name}</Text><Text style={[styles.meta, { color: palette.muted }]}>{item.position ?? item.rosterRank ?? item.role}</Text></View></View>}
+      /> : <Text style={[styles.meta, { color: palette.muted }]}>Crew is not listed for this flight in the imported report.</Text>}
     </SwipeSurface>
   </IOSSheet>;
 }
