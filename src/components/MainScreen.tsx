@@ -30,7 +30,7 @@ const TAB_ICONS: Record<Tab, { glyph: string; size: number; nudge: number; weigh
   Money: { glyph: '₸', size: 19, nudge: 0, weight: '800' },
   More: { glyph: '•••', size: 15, nudge: -3, weight: '700' },
 };
-type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua', string>;
+type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua'|'weekend', string>;
 type FlightRow = { duty: Duty; sector: Sector };
 type RosterDuty = { roster: ParsedAirAstanaRoster; duty: Duty };
 type FocusDuty = RosterDuty & { reportMs: number; releaseMs: number };
@@ -100,6 +100,7 @@ export default function MainScreen() {
     accentSoft: lovedMode ? (dark ? '#44231F' : '#FFD8C9') : (dark ? '#222925' : '#E6ECE8'),
     rose: lovedMode ? '#DE466D' : (dark ? '#C7BDAE' : '#2F3934'),
     aqua: lovedMode ? '#2EC5D2' : (dark ? '#B5AFA4' : '#5F5C55'),
+    weekend: lovedMode ? (dark ? '#D88C82' : '#BE5559') : (dark ? '#DE8580' : '#B84E4E'),
   }), [dark, lovedMode]);
 
   const importRoster = async () => {
@@ -350,11 +351,14 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, import
 
     {!roster ? <View style={[styles.emptyCard, styles.depthSurface, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster PDF to begin.</Text></View> : <View style={[styles.innerWindow, styles.depthSurface, { backgroundColor: palette.surface, borderColor: palette.line }]}>
       <FlatList data={flights} keyExtractor={({ sector }) => sector.id} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}
-        renderItem={({ item: { duty, sector } }) => <Pressable onPress={() => onSelect(sector.id)} style={[styles.rosterCard, { backgroundColor: selectedSector?.id === sector.id ? palette.accentSoft : palette.surfaceStrong, borderColor: palette.line }]}>
-          <View style={styles.flightCardTop}><Text style={[styles.label, { color: palette.muted }]}>{duty.dateLabel}</Text><Text style={[styles.flightNumber, { color: palette.muted }]}>{sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text></View>
-          <Text style={[styles.rosterRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text>
-          <Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime} · Report {duty.reportTime}</Text>
-        </Pressable>} />
+        renderItem={({ item: { duty, sector } }) => {
+          const dateMeta = rosterDateMeta(duty);
+          return <Pressable onPress={() => onSelect(sector.id)} style={[styles.rosterCard, { backgroundColor: selectedSector?.id === sector.id ? palette.accentSoft : palette.surfaceStrong, borderColor: palette.line }]}>
+            <View style={styles.flightCardTop}><Text style={[styles.label, { color: dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}</Text><Text style={[styles.flightNumber, { color: palette.muted }]}>{sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text></View>
+            <Text style={[styles.rosterRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text>
+            <Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime} · Report {duty.reportTime}</Text>
+          </Pressable>;
+        }} />
     </View>}
 
     {selectedRow && <FlightDetail sector={selectedRow.sector} dateLabel={selectedRow.duty.dateLabel} palette={palette} onClose={() => onSelect(undefined)} onPrevious={selectedIndex > 0 ? () => onSelect(flights[selectedIndex - 1].sector.id) : undefined} onNext={selectedIndex < flights.length - 1 ? () => onSelect(flights[selectedIndex + 1].sector.id) : undefined} />}
@@ -431,6 +435,15 @@ function formatCountdown(milliseconds: number): string {
   const days = Math.floor(total / 86400); const hours = Math.floor((total % 86400) / 3600); const minutes = Math.floor((total % 3600) / 60); const seconds = total % 60;
   const clock = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   return days > 0 ? `${days}d ${clock}` : clock;
+}
+function rosterDateMeta(duty: Duty): { label: string; weekend: boolean } {
+  if (!duty.date) return { label: duty.dateLabel, weekend: false };
+  const [year, month, day] = duty.date.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (!Number.isFinite(date.getTime())) return { label: duty.dateLabel, weekend: false };
+  const weekdayIndex = date.getUTCDay();
+  const weekday = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][weekdayIndex];
+  return { label: `${duty.dateLabel} · ${weekday}`, weekend: weekdayIndex === 0 || weekdayIndex === 6 };
 }
 function routeChain(duty: Duty): string { return [duty.sectors[0]?.departure, ...duty.sectors.map((sector) => sector.arrival)].filter(Boolean).join(' → '); }
 function TimeCell({ label, value, palette }: { label: string; value: string; palette: Palette }) { return <View style={styles.timeCell}><Text numberOfLines={1} style={[styles.timeLabel, { color: palette.muted }]}>{label}</Text><Text style={[styles.timeValue, { color: palette.text }]}>{value}</Text></View>; }
