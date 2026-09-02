@@ -9,6 +9,7 @@ export function rosterToDuties(roster: ParsedAirAstanaRoster): Duty[] {
     const sourceSectors = roster.sectors.filter((sector) => sector.dutyIndex === duty.index);
     if (sourceSectors.length === 0) return [];
     const first = sourceSectors[0];
+    const last = sourceSectors[sourceSectors.length - 1];
     const date = new Date(`${first.date}T00:00:00Z`);
     const sectors: Sector[] = sourceSectors.map((sector, index) => {
       const crew = getSectorCrew(roster, sector)?.members
@@ -28,14 +29,18 @@ export function rosterToDuties(roster: ParsedAirAstanaRoster): Duty[] {
         actualTimes: sector.actualTimes,
       };
     });
+    const reportStamp = duty.start?.split('T');
+    const releaseStamp = duty.end?.split('T');
     return [{
       id: `duty-${first.date}-${duty.index}`,
       date: first.date,
+      reportDate: reportStamp?.[0] ?? first.date,
+      releaseDate: releaseStamp?.[0] ?? last.date,
       dateLabel: `${String(date.getUTCDate()).padStart(2, '0')} ${MONTHS[date.getUTCMonth()]}`,
-      reportTime: duty.start?.split('T')[1] ?? first.timeOut,
-      releaseTime: duty.end?.split('T')[1] ?? sourceSectors[sourceSectors.length - 1].timeIn,
+      reportTime: reportStamp?.[1] ?? first.timeOut,
+      releaseTime: releaseStamp?.[1] ?? last.timeIn,
       sectors,
-      layoverStation: sourceSectors[sourceSectors.length - 1].arrivalAirport,
+      layoverStation: last.arrivalAirport,
     }];
   });
 }
