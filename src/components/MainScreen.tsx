@@ -156,7 +156,6 @@ export default function MainScreen() {
             ? <View style={styles.brandWord} accessibilityLabel="KhaVair special mode">
                 <Text style={[styles.brand, { color: palette.text }]}>Kha</Text>
                 <View style={styles.vHeartMark}>
-                  <Text style={[styles.brand, styles.vHeartLetter, { color: palette.rose }]}>V</Text>
                   <Text style={[styles.vHeartGlyph, { color: palette.rose }]}>♥</Text>
                 </View>
                 <Text style={[styles.brand, { color: palette.text }]}>air</Text>
@@ -422,7 +421,7 @@ function operatingCount(roster: ParsedAirAstanaRoster) { return roster.sectors.f
 
 const styles = StyleSheet.create({
   safe: { flex: 1 }, app: { flex: 1, width: '100%', maxWidth: 620, alignSelf: 'center', paddingHorizontal: 16 },
-  header: { height: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, brand: { fontSize: 27, fontWeight: '700', letterSpacing: -.8 }, brandWord: { flexDirection: 'row', alignItems: 'baseline' }, vHeartMark: { width: 22, height: 31, position: 'relative', justifyContent: 'center' }, vHeartLetter: { letterSpacing: -2 }, vHeartGlyph: { position: 'absolute', bottom: 0, left: 8, fontSize: 10, lineHeight: 10 }, kicker: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
+  header: { height: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, brand: { fontSize: 27, fontWeight: '700', letterSpacing: -.8 }, brandWord: { flexDirection: 'row', alignItems: 'baseline' }, vHeartMark: { width: 25, height: 31, alignItems: 'center', justifyContent: 'center' }, vHeartGlyph: { fontSize: 25, lineHeight: 31, fontWeight: '700' }, kicker: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
   modeButton: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }, modeGlyph: { fontSize: 19 },
   viewport: { flex: 1, minHeight: 0 }, screen: { flex: 1, paddingTop: 8, gap: 12 }, grow: { flex: 1, minWidth: 0 },
   sectionTitle: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.8 }, intro: { fontSize: 15, lineHeight: 22 }, label: { fontSize: 11, fontWeight: '700', letterSpacing: .9 }, meta: { fontSize: 13, lineHeight: 18 },
