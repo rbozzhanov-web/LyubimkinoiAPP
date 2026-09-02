@@ -47,8 +47,8 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
     Animated.parallel([
       Animated.timing(presentation, {
         toValue: 0,
-        duration: 210,
-        easing: Easing.bezier(0.32, 0.72, 0, 1),
+        duration: 190,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(dragY, {
@@ -102,10 +102,13 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
 
   if (!mounted) return null;
 
-  const introY = presentation.interpolate({ inputRange: [0, 1], outputRange: [34, 0] });
+  const introY = presentation.interpolate({ inputRange: [0, 1], outputRange: [28, 0] });
   const translateY = Animated.add(introY, dragY);
-  const scale = presentation.interpolate({ inputRange: [0, 1], outputRange: [0.985, 1] });
-  const baseDim = presentation.interpolate({ inputRange: [0, 1], outputRange: [0, backdropOpacity] });
+  const baseDim = presentation.interpolate({
+    inputRange: [0, 0.18, 1],
+    outputRange: [0, backdropOpacity, backdropOpacity],
+    extrapolate: 'clamp',
+  });
   const dragDim = dragY.interpolate({ inputRange: [0, 480], outputRange: [1, 0], extrapolate: 'clamp' });
   const dimOpacity = Animated.multiply(baseDim, dragDim);
   const content = typeof children === 'function' ? children(dismiss) : children;
@@ -117,7 +120,7 @@ export function IOSSheet({ visible, onClose, children, style, handleColor, backd
       <Animated.View
         accessibilityViewIsModal
         onLayout={(event) => { sheetHeight.current = event.nativeEvent.layout.height; }}
-        style={[styles.sheetBase, style, { opacity: presentation, transform: [{ translateY }, { scale }] }]}
+        style={[styles.sheetBase, style, { transform: [{ translateY }] }]}
       >
         <View style={styles.grabberTouch} {...responder.panHandlers}>
           <View style={[styles.grabber, { backgroundColor: handleColor }]} />
