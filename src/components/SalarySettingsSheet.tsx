@@ -77,7 +77,6 @@ export function SalarySettingsSheet({ visible, roster, palette, onClose, onSaved
           <Text style={[styles.title, { color: palette.text }]}>Salary settings</Text>
           <Text style={[styles.meta, { color: palette.muted }]}>Optional · stored only on this device</Text>
         </View>
-        <Pressable onPress={dismiss} style={[styles.close, { backgroundColor: palette.surface }]}><Text style={[styles.closeText, { color: palette.text }]}>×</Text></Pressable>
       </View>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Field label="Hourly rate · ₸" value={draft.hourlyRate} onChange={(v) => setDraft((d) => ({ ...d, hourlyRate: v }))} palette={palette} />
@@ -136,7 +135,6 @@ const styles = StyleSheet.create({
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }, grow: { flex: 1 },
   title: { fontSize: 25, fontWeight: '700', letterSpacing: -0.4 }, meta: { fontSize: 12, lineHeight: 17 },
-  close: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' }, closeText: { fontSize: 27 },
   scroll: { flex: 1 }, content: { paddingBottom: 22 }, section: { fontSize: 16, fontWeight: '700', marginTop: 12, marginBottom: 8 },
   field: { marginBottom: 10 }, label: { fontSize: 11, fontWeight: '600', marginBottom: 5 },
   input: { height: 46, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, paddingHorizontal: 13, fontSize: 16 },

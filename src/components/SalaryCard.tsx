@@ -98,13 +98,12 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
       handleColor={palette.line}
       style={[styles.sheet, { backgroundColor: palette.background, borderColor: palette.line }]}
     >
-      {(dismiss) => <>
+      <>
         <View style={styles.sheetHeader}>
           <View style={styles.grow}>
             <Text style={[styles.sheetTitle, { color: palette.text }]}>Money</Text>
             <Text style={[styles.meta, { color: palette.muted }]}>{monthLabel}</Text>
           </View>
-          <Pressable onPress={dismiss} style={[styles.close, { backgroundColor: palette.surface }]}><Text style={[styles.closeText, { color: palette.text }]}>×</Text></Pressable>
         </View>
 
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
@@ -161,7 +160,7 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
             {readiness.missing.length > 0 && <Text style={[styles.hint, { color: palette.muted }]}>Missing: {readiness.missing.join(', ')}.</Text>}
           </View>}
         </ScrollView>
-      </>}
+      </>
     </IOSSheet>
   </>;
 }
@@ -214,8 +213,6 @@ const styles = StyleSheet.create({
   sheet: { height: '90%', maxWidth: 620, borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 18, paddingBottom: 10, overflow: 'hidden' },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', paddingBottom: 8 },
   sheetTitle: { fontSize: 25, fontWeight: '700', letterSpacing: -0.4 },
-  close: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  closeText: { fontSize: 27 },
   scroll: { flex: 1 }, scrollContent: { paddingBottom: 24 },
   section: { fontSize: 17, fontWeight: '700', marginTop: 12, marginBottom: 8 },
   sectionDivider: { height: StyleSheet.hairlineWidth, marginTop: 18, marginBottom: 2 },
