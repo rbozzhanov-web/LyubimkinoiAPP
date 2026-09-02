@@ -12,9 +12,9 @@ type Props = {
   dominance?: number;
 };
 
-const RETURN_SPRING = { stiffness: 260, damping: 28, mass: 0.9, useNativeDriver: true } as const;
-const ENTRY_SPRING = { stiffness: 245, damping: 29, mass: 0.88, useNativeDriver: true } as const;
-const PAGE_EASING = Easing.bezier(0.2, 0.72, 0, 1);
+const RETURN_SPRING = { stiffness: 255, damping: 29, mass: 0.92, useNativeDriver: true } as const;
+const ENTRY_SPRING = { stiffness: 275, damping: 31, mass: 0.9, useNativeDriver: true } as const;
+const PAGE_EASING = Easing.bezier(0.22, 0.78, 0, 1);
 const WEB_COMPOSITE = Platform.OS === 'web'
   ? ({ willChange: 'transform', backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' } as any)
   : undefined;
@@ -36,14 +36,15 @@ export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwi
     });
   }, [translation]);
 
-  const completeHorizontal = useCallback((direction: -1 | 1, callback: () => void) => {
+  const completeHorizontal = useCallback((direction: -1 | 1, callback: () => void, velocity = 0) => {
     if (transitioning.current) return;
     transitioning.current = true;
     const width = Math.max(260, size.current.width);
+    const speed = Math.abs(velocity);
 
     Animated.timing(translation.x, {
       toValue: direction * (width + 8),
-      duration: 178,
+      duration: speed >= 1 ? 120 : speed >= 0.65 ? 140 : 164,
       easing: PAGE_EASING,
       useNativeDriver: true,
       isInteraction: false,
@@ -56,6 +57,7 @@ export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwi
         Animated.spring(translation.x, {
           toValue: 0,
           ...ENTRY_SPRING,
+          velocity: direction * Math.min(2, Math.max(0.45, speed)),
           isInteraction: false,
         }).start(() => reset());
       });
@@ -112,8 +114,8 @@ export function SwipeSurface({ children, style, onSwipeLeft, onSwipeRight, onSwi
 
       activeAxis.current = undefined;
       if (horizontal && (absX >= threshold || fastHorizontal)) {
-        if (gesture.dx < 0 && onSwipeLeft) { completeHorizontal(-1, onSwipeLeft); return; }
-        if (gesture.dx > 0 && onSwipeRight) { completeHorizontal(1, onSwipeRight); return; }
+        if (gesture.dx < 0 && onSwipeLeft) { completeHorizontal(-1, onSwipeLeft, gesture.vx); return; }
+        if (gesture.dx > 0 && onSwipeRight) { completeHorizontal(1, onSwipeRight, gesture.vx); return; }
       }
       if (vertical && (gesture.dy >= threshold || fastDown) && onSwipeDown) {
         completeDown(onSwipeDown);
