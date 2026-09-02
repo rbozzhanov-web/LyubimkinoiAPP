@@ -1,16 +1,13 @@
 import type { StationStay } from './layovers';
 import type { PerDiemRegion, PerDiemRule } from './types';
 
-export type PerDiemStationRegion = PerDiemRegion | 'UNCLASSIFIED';
-
 export interface PerDiemStayResult {
   stay: StationStay;
-  region: PerDiemStationRegion;
+  region: PerDiemRegion;
   eligible: boolean;
   units: number;
   usdAmount: number;
   kztAmount: number;
-  needsClassification: boolean;
 }
 
 export interface PerDiemMonthResult {
@@ -19,55 +16,29 @@ export interface PerDiemMonthResult {
   kazakhstanKzt: number;
   totalUsd?: number;
   totalKzt?: number;
-  unresolvedStations: string[];
 }
 
 export const PER_DIEM_RULES: Record<PerDiemRegion, PerDiemRule> = {
   KZ: { region: 'KZ', minimumStationMinutes: 6 * 60, usdRate: null, mrpMultiplier: 3 },
-  ASIA: { region: 'ASIA', minimumStationMinutes: 2 * 60, usdRate: 50 },
+  FOREIGN_50: { region: 'FOREIGN_50', minimumStationMinutes: 2 * 60, usdRate: 50 },
   EU_UK: { region: 'EU_UK', minimumStationMinutes: 2 * 60, usdRate: 60 },
 };
 
-// Keep this conservative. Only stations that fit a confirmed rate bucket without interpretation are
-// classified automatically. Turkey is explicitly Asia per the confirmed user rule. Greece is EU;
-// Kyrgyzstan is Asia. Anything whose contractual bucket is not confirmed remains UNCLASSIFIED.
+// Kazakhstan stations present in the current Air Astana route/pay tables. ALA is the home base and
+// never receives Kazakhstan per diem; the other KZ stations use the >6h-per-UTC-day rule.
 const KZ_STATIONS = new Set([
   'AKX', 'ALA', 'BSZ', 'CIT', 'DMB', 'GUW', 'KGF', 'KSN', 'KZO', 'NQZ', 'PLX', 'PWQ', 'SCO', 'UKK', 'URA',
 ]);
+
+// EU/UK stations present in the current published CrewPay route set. Everything foreign that is
+// not in this bucket is $50 — no geographical guesswork or unclassified state is needed.
 const EU_UK_STATIONS = new Set(['AMS', 'FRA', 'HER', 'LHR']);
-const ASIA_STATIONS = new Set([
-  'AUH', 'AYT', 'BJV', 'BKK', 'BOM', 'CAN', 'CMB', 'CTU', 'CXR', 'DAD', 'DEL', 'DOH', 'DXB', 'DYU', 'FRU', 'GOI',
-  'HKT', 'ICN', 'IST', 'JED', 'MED', 'MLE', 'OSS', 'PEK', 'PQC', 'SYX', 'TAS', 'TLV', 'UBN', 'URC',
-]);
 
-/**
- * Stations present in the current CrewPay route set whose per-diem bucket must not be guessed.
- * Keeping the reasons in code makes future policy updates deliberate rather than geographical
- * assumptions silently changing pay.
- */
-export const UNCONFIRMED_PER_DIEM_STATIONS: Readonly<Record<string, string>> = {
-  BUS: 'Georgia/Caucasus rate bucket not confirmed',
-  GYD: 'Azerbaijan/Caucasus rate bucket not confirmed',
-  TBS: 'Georgia/Caucasus rate bucket not confirmed',
-  DME: 'Russia rate bucket not confirmed',
-  LED: 'Russia rate bucket not confirmed',
-  OVB: 'Russia rate bucket not confirmed',
-  KBP: 'Ukraine is outside the confirmed EU/UK bucket',
-  TGD: 'Montenegro is outside the confirmed EU/UK bucket',
-  HRG: 'Egypt/Africa rate bucket not confirmed',
-  SSH: 'Egypt/Africa rate bucket not confirmed',
-};
-
-export function classifyPerDiemStation(station: string): PerDiemStationRegion {
+export function classifyPerDiemStation(station: string): PerDiemRegion {
   const code = station.trim().toUpperCase();
   if (KZ_STATIONS.has(code)) return 'KZ';
   if (EU_UK_STATIONS.has(code)) return 'EU_UK';
-  if (ASIA_STATIONS.has(code)) return 'ASIA';
-  return 'UNCLASSIFIED';
-}
-
-export function getUnconfirmedPerDiemReason(station: string): string | undefined {
-  return UNCONFIRMED_PER_DIEM_STATIONS[station.trim().toUpperCase()];
+  return 'FOREIGN_50';
 }
 
 export function isLayoverEligible(region: PerDiemRegion, stationMinutes: number) {
@@ -108,13 +79,10 @@ export function kazakhstanQualifyingUtcDays(stay: StationStay): number {
 
 export function calculatePerDiemStay(stay: StationStay, mrpKzt: number, usdKzt?: number): PerDiemStayResult {
   const region = classifyPerDiemStation(stay.station);
-  if (region === 'UNCLASSIFIED') {
-    return { stay, region, eligible: false, units: 0, usdAmount: 0, kztAmount: 0, needsClassification: true };
-  }
 
   if (region === 'KZ') {
-    if (stay.station.toUpperCase() === 'ALA') {
-      return { stay, region, eligible: false, units: 0, usdAmount: 0, kztAmount: 0, needsClassification: false };
+    if (stay.station.trim().toUpperCase() === 'ALA') {
+      return { stay, region, eligible: false, units: 0, usdAmount: 0, kztAmount: 0 };
     }
     const units = kazakhstanQualifyingUtcDays(stay);
     const kztAmount = units * getKazakhstanPerDiemKzt(mrpKzt);
@@ -125,7 +93,6 @@ export function calculatePerDiemStay(stay: StationStay, mrpKzt: number, usdKzt?:
       units,
       usdAmount: usdKzt && usdKzt > 0 ? kztAmount / usdKzt : 0,
       kztAmount,
-      needsClassification: false,
     };
   }
 
@@ -138,7 +105,6 @@ export function calculatePerDiemStay(stay: StationStay, mrpKzt: number, usdKzt?:
     units: eligible ? 1 : 0,
     usdAmount,
     kztAmount: usdKzt && usdKzt > 0 ? usdAmount * usdKzt : 0,
-    needsClassification: false,
   };
 }
 
@@ -152,9 +118,8 @@ export function calculatePerDiemMonth(
     .filter((stay) => stay.arrivalLocal.startsWith(monthKey))
     .map((stay) => calculatePerDiemStay(stay, mrpKzt, usdKzt));
 
-  const foreignUsd = round2(items.filter((item) => item.region === 'ASIA' || item.region === 'EU_UK').reduce((sum, item) => sum + item.usdAmount, 0));
+  const foreignUsd = round2(items.filter((item) => item.region !== 'KZ').reduce((sum, item) => sum + item.usdAmount, 0));
   const kazakhstanKzt = round2(items.filter((item) => item.region === 'KZ').reduce((sum, item) => sum + item.kztAmount, 0));
-  const unresolvedStations = [...new Set(items.filter((item) => item.needsClassification).map((item) => item.stay.station))].sort();
 
   return {
     items,
@@ -162,7 +127,6 @@ export function calculatePerDiemMonth(
     kazakhstanKzt,
     totalUsd: usdKzt && usdKzt > 0 ? round2(foreignUsd + kazakhstanKzt / usdKzt) : undefined,
     totalKzt: usdKzt && usdKzt > 0 ? round2(kazakhstanKzt + foreignUsd * usdKzt) : undefined,
-    unresolvedStations,
   };
 }
 
