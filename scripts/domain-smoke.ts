@@ -47,6 +47,16 @@ equal(calculatePerDiemStay(stay('HER', '2026-07-01T10:00', '2026-07-01T14:00', 2
 equal(calculatePerDiemStay(stay('FRA', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 60, 'EU Germany $60');
 equal(calculatePerDiemStay(stay('LHR', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 60, 'UK $60');
 
+// Foreign layovers also qualify against UTC calendar-day slices. A relay spanning three
+// hours can still be unpaid when midnight UTC divides it into slices of no more than two hours.
+const splitForeign = calculatePerDiemStay(stay('IST', '2026-07-08T01:30', '2026-07-08T04:30', 180), MRP_2026);
+equal(splitForeign.eligible, false, 'foreign slices of 1:30 each do not qualify');
+equal(splitForeign.units, 0, 'unqualified foreign relay has no unit');
+
+const qualifyingForeign = calculatePerDiemStay(stay('IST', '2026-07-08T01:30', '2026-07-08T05:30', 240), MRP_2026);
+equal(qualifyingForeign.eligible, true, 'foreign UTC slice over two hours qualifies');
+equal(qualifyingForeign.units, 1, 'foreign relay still pays once');
+
 // Other Crew often continues onto page 2 without repeating the table heading. This synthetic
 // fixture locks the real August failure mode without storing any real employee data in the repo.
 const text = (str: string, x: number, y: number): TextItem => ({ str, x, y, width: Math.max(8, str.length * 4) });
