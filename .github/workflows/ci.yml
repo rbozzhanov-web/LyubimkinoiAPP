@@ -19,3 +19,13 @@ jobs:
         run: npm run test:domain
       - name: Build web bundle
         run: npx expo export --platform web --output-dir dist
+      - name: Verify installable PWA assets
+        run: |
+          test -f dist/manifest.webmanifest
+          test -f dist/apple-touch-icon.png
+          test -f dist/icon-192.png
+          test -f dist/icon-512.png
+          test -f dist/favicon-64.png
+          grep -q 'apple-mobile-web-app-title' dist/index.html
+          grep -q 'manifest.webmanifest' dist/index.html
+          grep -q 'Content-Security-Policy' dist/index.html
