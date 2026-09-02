@@ -5,6 +5,7 @@ import type { ExtractedPage, TextItem } from './types';
 export interface RosterCrewMember { rank: string; id: string; name: string; deadhead: boolean }
 export interface CrewRecord { date: string; flightNumber: string; members: RosterCrewMember[] }
 const CREW_MEMBER_RE = /^([A-Z]{2,3})\s*-\s*(DHC\s*-\s*)?(\d{1,6})\s*-\s*(.+)$/;
+const CREW_END_SECTIONS = new Set(['Expiry Dates', 'Hotel Information', 'Memos', 'Descriptions']);
 
 type CrewColumns = { date: number; duty: number; details: number };
 
@@ -31,15 +32,17 @@ export function extractCrewRecords(pages: ExtractedPage[]): CrewRecord[] {
       columns = headingColumns(heading);
       insideCrewSection = columns !== undefined;
     }
-
     if (!insideCrewSection || !columns) continue;
 
     // Air Astana often starts "Other Crew" near the bottom of one page and continues the table
     // on following pages without repeating the Date / Duty / Details heading. Keep the last known
     // column geometry and continue parsing until a clearly different section starts.
-    const pageHasEndSection = lines.some((line) => line.items.some((item) => ['Expiry Dates', 'Hotel Information', 'Memos', 'Descriptions'].includes(item.str.trim())));
+    const endSection = lines
+      .filter((line) => line.items.some((item) => CREW_END_SECTIONS.has(item.str.trim())))
+      .sort((a, b) => a.y - b.y)[0];
     const minY = heading ? heading.y : -Infinity;
-    const usable = page.items.filter((item) => item.y > minY && item.str.trim().length > 0);
+    const maxY = endSection?.y ?? Infinity;
+    const usable = page.items.filter((item) => item.y > minY && item.y < maxY && item.str.trim().length > 0);
     const anchors = usable
       .filter((item) => nearColumn(item, columns!.date, columns!.duty) && parseDateDdMmYyyy(item.str))
       .sort((a, b) => a.y - b.y);
@@ -59,7 +62,7 @@ export function extractCrewRecords(pages: ExtractedPage[]): CrewRecord[] {
       if (members.length > 0) records.push({ date, flightNumber: duty.str.trim(), members });
     }
 
-    if (pageHasEndSection) insideCrewSection = false;
+    if (endSection) insideCrewSection = false;
   }
   return records;
 }
@@ -78,7 +81,8 @@ function nearestAnchorIndex(anchors: TextItem[], y: number): number {
 }
 
 export function crewForSector(records: CrewRecord[], flightNumber: string, date: string, ownStaffId?: string) {
-  const record = records.find((candidate) => candidate.flightNumber === flightNumber && withinADay(candidate.date, date));
+  const record = records.find((candidate) => candidate.flightNumber === flightNumber && candidate.date === date)
+    ?? records.find((candidate) => candidate.flightNumber === flightNumber && withinADay(candidate.date, date));
   if (!record) return undefined;
   const own = ownStaffId ? record.members.find((member) => member.id === ownStaffId) : undefined;
   return {
