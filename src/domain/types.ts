@@ -5,6 +5,8 @@ export type CrewMember = {
   name: string;
   role: CrewRole;
   position?: string;
+  rosterRank?: string;
+  deadhead?: boolean;
 };
 
 export type Sector = {
@@ -16,6 +18,8 @@ export type Sector = {
   arrivalTime: string;
   blockMinutes: number;
   crew: CrewMember[];
+  deadhead?: boolean;
+  actualTimes?: boolean;
 };
 
 export type Duty = {
@@ -28,9 +32,4 @@ export type Duty = {
 };
 
 export type PerDiemRegion = 'KZ' | 'ASIA' | 'EU_UK';
-
-export type PerDiemRule = {
-  region: PerDiemRegion;
-  minimumStationMinutes: number;
-  usdRate: number | null;
-};
+export type PerDiemRule = { region: PerDiemRegion; minimumStationMinutes: number; usdRate: number | null };
