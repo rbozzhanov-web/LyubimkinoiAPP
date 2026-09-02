@@ -440,7 +440,9 @@ function rosterDateMeta(duty: Duty): { label: string; weekend: boolean } {
   if (!duty.date) return { label: duty.dateLabel, weekend: false };
   const [year, month, day] = duty.date.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
-  if (!Number.isFinite(date.getTime())) return { label: duty.dateLabel, weekend: false };
+  if (!Number.isFinite(date.getTime()) || date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    return { label: duty.dateLabel, weekend: false };
+  }
   const weekdayIndex = date.getUTCDay();
   const weekday = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][weekdayIndex];
   return { label: `${duty.dateLabel} · ${weekday}`, weekend: weekdayIndex === 0 || weekdayIndex === 6 };
