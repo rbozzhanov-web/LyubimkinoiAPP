@@ -6,7 +6,7 @@ import { exportRosterCalendar } from '@/src/domain/calendar';
 import type { Duty } from '@/src/domain/types';
 import { verifyLovedModeCode } from '@/src/domain/lovedMode';
 import { DEFAULT_PROFILE } from '@/src/domain/profile';
-import { sumReportedBlockMinutes } from '@/src/domain/layovers';
+import { sumReportedBlockMinutes, sumReportedNightMinutes } from '@/src/domain/layovers';
 import { formatMinutes, rosterMonthLabel, rosterToDuties } from '@/src/domain/rosterView';
 import { pickAndParseRoster } from '@/src/import/pickRoster';
 import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
@@ -41,6 +41,7 @@ export default function IndexScreen() {
   const duties = useMemo(() => roster ? rosterToDuties(roster) : [], [roster]);
   const activeDuty = duties.find((duty) => duty.id === selectedDuty) ?? duties[0];
   const cumulativeBlock = sumReportedBlockMinutes(rosters);
+  const cumulativeNight = sumReportedNightMinutes(rosters);
 
   const palette = useMemo<Palette>(() => ({
     background: dark ? '#11110F' : '#F4F1EC',
@@ -126,7 +127,7 @@ export default function IndexScreen() {
       </View>
 
       <View style={styles.viewport}>
-        {tab === 'Home' && <Home roster={roster} duties={duties} rosters={rosters} cumulativeBlock={cumulativeBlock} palette={palette} onImport={importRoster} importing={importing} />}
+        {tab === 'Home' && <Home roster={roster} duties={duties} rosters={rosters} cumulativeBlock={cumulativeBlock} cumulativeNight={cumulativeNight} palette={palette} onImport={importRoster} importing={importing} />}
         {tab === 'Roster' && <RosterScreen roster={roster} rosters={rosters} duties={duties} activeDuty={activeDuty} palette={palette} importing={importing} error={importError} onImport={importRoster} onSelect={setSelectedDuty} onMonth={changeMonth} />}
         {tab === 'Money' && <MoneyScreen roster={roster} palette={palette} />}
         {tab === 'More' && <MoreScreen rosters={rosters} palette={palette} onErase={eraseAll} />}
@@ -166,7 +167,7 @@ export default function IndexScreen() {
   </SafeAreaView>;
 }
 
-function Home({ roster, duties, rosters, cumulativeBlock, palette, onImport, importing }: { roster?: ParsedAirAstanaRoster; duties: Duty[]; rosters: ParsedAirAstanaRoster[]; cumulativeBlock: number; palette: Palette; onImport: () => void; importing: boolean }) {
+function Home({ roster, duties, rosters, cumulativeBlock, cumulativeNight, palette, onImport, importing }: { roster?: ParsedAirAstanaRoster; duties: Duty[]; rosters: ParsedAirAstanaRoster[]; cumulativeBlock: number; cumulativeNight: number; palette: Palette; onImport: () => void; importing: boolean }) {
   const duty = duties[0];
   if (!roster || !duty) return <View style={styles.screen}>
     <Text style={[styles.sectionTitle, { color: palette.text }]}>Your roster, simplified.</Text>
@@ -177,6 +178,7 @@ function Home({ roster, duties, rosters, cumulativeBlock, palette, onImport, imp
 
   const first = duty.sectors[0];
   const last = duty.sectors[duty.sectors.length - 1];
+  const monthNight = roster.totals.nightMinutes;
   return <View style={styles.screen}>
     <Text style={[styles.label, { color: palette.muted }]}>LATEST IMPORT · {rosterMonthLabel(roster)}</Text>
     <Card palette={palette}>
@@ -188,8 +190,8 @@ function Home({ roster, duties, rosters, cumulativeBlock, palette, onImport, imp
       <Text style={[styles.meta, { color: palette.muted }]}>Report {duty.reportTime} · Release {duty.releaseTime} · {duty.sectors.length} sector{duty.sectors.length === 1 ? '' : 's'}</Text>
     </Card>
     <View style={styles.summaryRow}>
-      <Summary title="THIS MONTH" value={formatMinutes(roster.totals.blockMinutes)} detail={`${operatingCount(roster)} operating sectors`} palette={palette} />
-      <Summary title="CUMULATIVE" value={formatMinutes(cumulativeBlock)} detail={`${rosters.length} month${rosters.length === 1 ? '' : 's'} imported`} palette={palette} />
+      <Summary title="THIS MONTH" value={formatMinutes(roster.totals.blockMinutes)} detail={`Night ${formatMinutes(monthNight)} · ${operatingCount(roster)} sectors`} palette={palette} />
+      <Summary title="CUMULATIVE" value={formatMinutes(cumulativeBlock)} detail={`Night ${formatMinutes(cumulativeNight)} · ${rosters.length} month${rosters.length === 1 ? '' : 's'}`} palette={palette} />
     </View>
     <Privacy palette={palette} />
   </View>;
