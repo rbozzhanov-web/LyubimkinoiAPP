@@ -6,6 +6,8 @@ export interface RosterCrewMember { rank: string; id: string; name: string; dead
 export interface CrewRecord { date: string; flightNumber: string; members: RosterCrewMember[] }
 const CREW_MEMBER_RE = /^([A-Z]{2,3})\s*-\s*(DHC\s*-\s*)?(\d{1,6})\s*-\s*(.+)$/;
 
+type CrewColumns = { date: number; duty: number; details: number };
+
 export function parseCrewMember(raw: string): RosterCrewMember | undefined {
   const match = CREW_MEMBER_RE.exec(raw.trim());
   if (!match) return undefined;
@@ -18,26 +20,51 @@ export function parseCrewDetails(details: string): RosterCrewMember[] {
 
 export function extractCrewRecords(pages: ExtractedPage[]): CrewRecord[] {
   const records: CrewRecord[] = [];
+  let columns: CrewColumns | undefined;
+  let insideCrewSection = false;
+
   for (const page of pages) {
     const lines = tokenizeLines(page);
     const heading = lines.find((line) => ['Date', 'Duty', 'Details'].every((label) => line.items.some((item) => item.str.trim() === label)));
-    if (!heading) continue;
-    const columns = headingColumns(heading); if (!columns) continue;
-    const below = page.items.filter((item) => item.y > heading.y && item.str.trim().length > 0);
-    const anchors = below.filter((item) => nearColumn(item, columns.date, columns.duty) && parseDateDdMmYyyy(item.str)).sort((a, b) => a.y - b.y);
-    const dutyItems = below.filter((item) => nearColumn(item, columns.duty, columns.details));
-    const detailItems = below.filter((item) => item.x >= columns.details - 4);
+
+    if (heading) {
+      columns = headingColumns(heading);
+      insideCrewSection = columns !== undefined;
+    }
+
+    if (!insideCrewSection || !columns) continue;
+
+    // Air Astana often starts "Other Crew" near the bottom of one page and continues the table
+    // on following pages without repeating the Date / Duty / Details heading. Keep the last known
+    // column geometry and continue parsing until a clearly different section starts.
+    const pageHasEndSection = lines.some((line) => line.items.some((item) => ['Expiry Dates', 'Hotel Information', 'Memos', 'Descriptions'].includes(item.str.trim())));
+    const minY = heading ? heading.y : -Infinity;
+    const usable = page.items.filter((item) => item.y > minY && item.str.trim().length > 0);
+    const anchors = usable
+      .filter((item) => nearColumn(item, columns!.date, columns!.duty) && parseDateDdMmYyyy(item.str))
+      .sort((a, b) => a.y - b.y);
+    const dutyItems = usable.filter((item) => nearColumn(item, columns!.duty, columns!.details));
+    const detailItems = usable.filter((item) => item.x >= columns!.details - 4);
+
     for (const [index, anchor] of anchors.entries()) {
       const date = parseDateDdMmYyyy(anchor.str)!;
-      const duty = nearestBy(dutyItems, anchor.y); if (!duty) continue;
-      const details = detailItems.filter((item) => nearestAnchorIndex(anchors, item.y) === index).sort((a, b) => a.y - b.y).map((item) => item.str.trim()).join(' ');
-      records.push({ date, flightNumber: duty.str.trim(), members: parseCrewDetails(details) });
+      const duty = nearestBy(dutyItems, anchor.y);
+      if (!duty || Math.abs(duty.y - anchor.y) > 12) continue;
+      const details = detailItems
+        .filter((item) => nearestAnchorIndex(anchors, item.y) === index)
+        .sort((a, b) => a.y - b.y || a.x - b.x)
+        .map((item) => item.str.trim())
+        .join(' ');
+      const members = parseCrewDetails(details);
+      if (members.length > 0) records.push({ date, flightNumber: duty.str.trim(), members });
     }
+
+    if (pageHasEndSection) insideCrewSection = false;
   }
   return records;
 }
 
-function headingColumns(heading: Line): { date: number; duty: number; details: number } | undefined {
+function headingColumns(heading: Line): CrewColumns | undefined {
   const at = (label: string) => heading.items.find((item) => item.str.trim() === label)?.x;
   const date = at('Date'), duty = at('Duty'), details = at('Details');
   return date === undefined || duty === undefined || details === undefined ? undefined : { date, duty, details };
