@@ -22,8 +22,7 @@ function stay(station: string, arrivalLocal: string, departureLocal: string, dur
   };
 }
 
-// Confirmed Kazakhstan examples: UTC midnight splits the presence interval, and only UTC-day
-// portions strictly longer than six hours qualify.
+// Kazakhstan: UTC midnight splits the presence interval; a UTC-day portion must be strictly >6h.
 equal(kazakhstanQualifyingUtcDays(stay('NQZ', '2026-07-07T06:09', '2026-07-07T19:22', 793)), 1, 'NQZ same UTC day');
 equal(kazakhstanQualifyingUtcDays(stay('NQZ', '2026-07-08T01:35', '2026-07-08T23:09', 1294)), 1, 'NQZ crossing UTC midnight');
 equal(kazakhstanQualifyingUtcDays(stay('NQZ', '2026-07-09T05:00', '2026-07-09T11:00', 360)), 0, 'exactly six hours is not enough');
@@ -32,16 +31,20 @@ const kz = calculatePerDiemStay(stay('NQZ', '2026-07-07T06:09', '2026-07-07T19:2
 equal(kz.kztAmount, 3 * MRP_2026, 'KZ per diem = 3 MRP');
 equal(kz.units, 1, 'KZ unit');
 
-// Foreign per diem is one unit per qualifying relay, even when the stay is longer than 24h.
+// Foreign: one unit per qualifying relay (>2h). EU/UK is $60; every other foreign station is $50.
 const cxr = calculatePerDiemStay(stay('CXR', '2026-07-09T09:03', '2026-07-10T09:41', 1478), MRP_2026);
 equal(cxr.units, 1, 'CXR one relay unit');
-equal(cxr.usdAmount, 50, 'CXR Asia rate');
-equal(classifyPerDiemStation('IST'), 'ASIA', 'Turkey is Asia');
-equal(classifyPerDiemStation('AYT'), 'ASIA', 'Turkey is Asia');
-equal(calculatePerDiemStay(stay('LHR', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 60, 'UK rate');
+equal(cxr.usdAmount, 50, 'CXR foreign rate');
+equal(classifyPerDiemStation('IST'), 'FOREIGN_50', 'Turkey uses the $50 bucket');
+equal(calculatePerDiemStay(stay('BUS', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 50, 'Georgia $50');
+equal(calculatePerDiemStay(stay('DME', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 50, 'Russia $50');
+equal(calculatePerDiemStay(stay('HRG', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 50, 'Egypt $50');
+equal(calculatePerDiemStay(stay('TGD', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 50, 'non-EU Montenegro $50');
+equal(calculatePerDiemStay(stay('HER', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 60, 'EU Greece $60');
+equal(calculatePerDiemStay(stay('FRA', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 60, 'EU Germany $60');
+equal(calculatePerDiemStay(stay('LHR', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 60, 'UK $60');
 
-// Anonymous salary example locks the confirmed cabin-crew tariff bands without storing anyone's
-// personal salary or payslip data in the repository.
+// Anonymous salary example locks the confirmed cabin-crew tariff bands without storing personal data.
 const roster: ParsedAirAstanaRoster = {
   period: { start: '2026-07-01', end: '2026-07-31' },
   totals: { blockMinutes: 0, nightMinutes: 0 },
