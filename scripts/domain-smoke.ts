@@ -2,6 +2,8 @@ import { calculatePerDiemStay, classifyPerDiemStation, kazakhstanQualifyingUtcDa
 import { calculateRosterPay } from '../src/domain/pay';
 import type { StationStay } from '../src/domain/layovers';
 import type { ParsedAirAstanaRoster } from '../src/import/parseAirAstanaRoster';
+import { extractCrewRecords } from '../src/import/crew';
+import type { ExtractedPage, TextItem } from '../src/import/types';
 
 const MRP_2026 = 4325;
 
@@ -43,6 +45,33 @@ equal(calculatePerDiemStay(stay('TGD', '2026-07-01T10:00', '2026-07-01T14:00', 2
 equal(calculatePerDiemStay(stay('HER', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 60, 'EU Greece $60');
 equal(calculatePerDiemStay(stay('FRA', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 60, 'EU Germany $60');
 equal(calculatePerDiemStay(stay('LHR', '2026-07-01T10:00', '2026-07-01T14:00', 240), MRP_2026).usdAmount, 60, 'UK $60');
+
+// Other Crew often continues onto page 2 without repeating the table heading. This synthetic
+// fixture locks the real August failure mode without storing any real employee data in the repo.
+const text = (str: string, x: number, y: number): TextItem => ({ str, x, y, width: Math.max(8, str.length * 4) });
+const crewPages: ExtractedPage[] = [
+  {
+    width: 600,
+    height: 800,
+    items: [
+      text('Date', 20, 100), text('Duty', 130, 100), text('Details', 220, 100),
+      text('06/08/2026', 20, 130), text('915', 130, 130),
+      text('CP - 101 - TEST CAPTAIN | FJ - 202 - TEST CREW', 220, 130),
+    ],
+  },
+  {
+    width: 600,
+    height: 800,
+    items: [
+      text('07/08/2026', 20, 60), text('916', 130, 60),
+      text('CP - 303 - SECOND CAPTAIN | FY - 404 - SECOND CREW', 220, 60),
+    ],
+  },
+];
+const continuedCrew = extractCrewRecords(crewPages);
+equal(continuedCrew.length, 2, 'crew table continues across pages');
+equal(continuedCrew[1]?.flightNumber, '916', 'continued page flight');
+equal(continuedCrew[1]?.members.length, 2, 'continued page crew members');
 
 // Anonymous salary example locks the confirmed cabin-crew tariff bands without storing personal data.
 const roster: ParsedAirAstanaRoster = {
