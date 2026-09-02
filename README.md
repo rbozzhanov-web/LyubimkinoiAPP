@@ -29,4 +29,17 @@ npm run web
 npm run typecheck
 ```
 
+### App icons
+
+Every icon slot is generated, never copied. `assets/icon-source.png` is the master artwork;
+`npm run icons` rescales it into the Expo app icon (1024), the iOS home-screen icon (180), the
+two manifest icons (512, 192) and the favicon (64). `npm run verify:icons` — which CI runs
+before the build — fails if any file is not the size it claims to be, or is a truncated PNG.
+Both have shipped before: one 64x64 image once stood in for all five, and installability
+depends on the real pixel size rather than the filename.
+
+The current master is only 64x64, so the larger icons are upscales. Replacing
+`assets/icon-source.png` with the full-resolution export and re-running `npm run icons` is all
+that is needed to sharpen them.
+
 Real rosters contain personal information and must not be committed to this repository.

@@ -10,6 +10,8 @@
     "ios": "expo start --ios",
     "build:web": "expo export --platform web --output-dir dist && node scripts/make-sw.mjs",
     "typecheck": "tsc --noEmit",
+    "icons": "node scripts/make-icons.mjs",
+    "verify:icons": "node scripts/verify-icons.mjs",
     "test:domain": "tsx scripts/domain-smoke.ts"
   },
   "dependencies": {

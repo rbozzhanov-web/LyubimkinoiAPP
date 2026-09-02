@@ -1,0 +1,46 @@
+# dependencies
+node_modules/
+
+# Expo / Metro
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+
+# generated native folders
+/ios
+/android
+
+# scratch files
+# A run once committed public/_tmp_should_not_exist, favicon-64.tmp and
+# src/components/SalaryCardV2.tmp straight to main. Staging files stay untracked.
+*.tmp
+*.orig
+*.bak
+_tmp*
+_*.txt
+
+# crew rosters carry personal data and must never be committed (see README)
+*.pdf
+!docs/**/*.pdf
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# secrets and local env
+.env*.local
+*.pem
+*.p8
+*.p12
+*.jks
+*.key
+*.mobileprovision
+
+# typescript
+*.tsbuildinfo
+
+# macOS
+.DS_Store

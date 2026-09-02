@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, 'feat/**']
+    branches: [main, 'feat/**', 'claude/**']
   pull_request:
 
 permissions:
@@ -20,6 +20,8 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
       - run: npm run typecheck
+      - name: Verify icon sizes
+        run: npm run verify:icons
       - name: Domain smoke tests
         run: npm run test:domain
       - name: Build offline-ready web bundle
