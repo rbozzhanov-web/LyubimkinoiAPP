@@ -18,16 +18,19 @@ export function saveLovedMode(): void {
 export function clearLovedMode(): void {
   if (typeof localStorage === 'undefined') return;
   localStorage.removeItem(LOVED_MODE_KEY);
+  localStorage.removeItem(THEME_KEY);
 }
 
 export function loadSavedTheme(): SavedTheme | undefined {
   if (typeof localStorage === 'undefined') return undefined;
+  if (localStorage.getItem(LOVED_MODE_KEY) !== 'active') return undefined;
   const value = localStorage.getItem(THEME_KEY);
   return value === 'light' || value === 'dark' ? value : undefined;
 }
 
 export function saveTheme(theme: SavedTheme): void {
   if (typeof localStorage === 'undefined') return;
+  if (localStorage.getItem(LOVED_MODE_KEY) !== 'active') return;
   localStorage.setItem(THEME_KEY, theme);
 }
 
