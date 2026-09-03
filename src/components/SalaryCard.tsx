@@ -9,6 +9,7 @@ import { calculatePerDiemMonth, formatUsd } from '@/src/domain/perDiem';
 import { detectStationStays, formatStayDuration } from '@/src/domain/layovers';
 import { loadPayMonth, loadPayProfile } from '@/src/storage/payStorage';
 import { loadStoredRosters } from '@/src/storage/rosterStorage';
+import { loadLovedMode } from '@/src/storage/lovedModeStorage';
 import { IOSSheet } from './IOSOverlay';
 
 type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua', string>;
@@ -16,6 +17,7 @@ type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'lin
 export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster; palette: Palette }) {
   const monthKey = roster.period.start.slice(0, 7);
   const monthLabel = formatMonthLabel(monthKey);
+  const specialMode = loadLovedMode();
   const [open, setOpen] = useState(false);
   const [sheetScrollAtTop, setSheetScrollAtTop] = useState(true);
   const [profile, setProfile] = useState<Partial<PayProfile>>();
@@ -39,12 +41,18 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
     return () => { alive = false; };
   }, [monthKey]);
 
-  const readiness = useMemo(() => payReadiness(roster, profile, month), [roster, profile, month]);
+  const readiness = useMemo(
+    () => payReadiness(roster, profile, month, { includeSpecialCrewPayNorm: specialMode }),
+    [roster, profile, month, specialMode],
+  );
   const calculation = useMemo<PayCalculation | undefined>(() => {
     if (!readiness.ready || !mrp || !profile) return undefined;
-    try { return calculateRosterPay(roster, profile as PayProfile, month ?? {}, mrp.valueKzt); }
-    catch { return undefined; }
-  }, [roster, profile, month, mrp, readiness.ready]);
+    try {
+      return calculateRosterPay(roster, profile as PayProfile, month ?? {}, mrp.valueKzt, { includeSpecialCrewPayNorm: specialMode });
+    } catch {
+      return undefined;
+    }
+  }, [roster, profile, month, mrp, readiness.ready, specialMode]);
 
   const localStays = useMemo(() => detectStationStays(loadStoredRosters()), [roster.period.start, roster.sectors.length]);
   const perDiem = useMemo(
