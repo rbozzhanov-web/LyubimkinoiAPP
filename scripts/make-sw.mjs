@@ -33,9 +33,9 @@ self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)));
 });
 
-self.addEventListener('message', (event) => {
-  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
-});
+// Keep a newly installed worker waiting while the current PWA session is open.
+// Older app shells may still send SKIP_WAITING; intentionally ignore that message
+// so iOS never swaps workers/caches underneath a running React application.
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
