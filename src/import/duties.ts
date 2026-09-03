@@ -8,7 +8,7 @@ export interface RosterSector {
 }
 export interface RosterDuty { index: number; start?: string; end?: string; sectorCount: number }
 export interface RosterAbsence { code: 'SICK' | 'UFF' | 'VAC' | 'CHLD'; date: string }
-export interface RosterReading { sectors: RosterSector[]; duties: RosterDuty[]; absences: RosterAbsence[]; unreadCells: string[] }
+export interface RosterReading { sectors: RosterSector[]; boundarySectors: RosterSector[]; duties: RosterDuty[]; absences: RosterAbsence[]; unreadCells: string[] }
 const DELAY_LABEL = 'Delay';
 const GROUND_DUTY_CODE_RE = /^[A-Z][A-Z0-9_]{1,7}$/;
 // Codes that take a day out of the salary and transport month. Verified against four
@@ -19,6 +19,7 @@ const PAYROLL_ABSENCE_CODES = new Set<RosterAbsence['code']>(['SICK', 'UFF', 'VA
 
 export function readRoster(columns: DayColumn[], periodStart: string, periodEnd: string): RosterReading {
   const sectors: RosterSector[] = [];
+  const boundarySectors: RosterSector[] = [];
   const duties: RosterDuty[] = [];
   const absences: RosterAbsence[] = [];
   const unreadCells: string[] = [];
@@ -82,7 +83,11 @@ export function readRoster(columns: DayColumn[], periodStart: string, periodEnd:
       unreadCells.push(cell); i += 1;
     }
   }
-  return { sectors, duties, absences, unreadCells };
+  // A sector that leaves on the last day of the report can continue into the next month,
+  // whose grid is not part of this PDF. Keep that known partial sector for roster/history UI
+  // instead of silently dropping the flight. It stays separate from payroll/layover sectors.
+  if (carried) boundarySectors.push(carried);
+  return { sectors, boundarySectors, duties, absences, unreadCells };
 }
 
 function readSector(cells: string[], start: number, date: string, duty: RosterDuty): { sector: RosterSector; next: number; continues: boolean } | undefined {

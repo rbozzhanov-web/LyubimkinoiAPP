@@ -9,6 +9,8 @@ export interface ParsedAirAstanaRoster {
   period: ReportPeriod;
   totals: ReportTotals;
   sectors: RosterSector[];
+  /** Known departures that continue beyond the report's last calendar column. UI-only; excluded from payroll/layover calculations. */
+  boundarySectors?: RosterSector[];
   duties: RosterDuty[];
   absences: RosterAbsence[];
   crewRecords: CrewRecord[];
@@ -27,6 +29,7 @@ export function parseAirAstanaRoster(pages: ExtractedPage[]): ParsedAirAstanaRos
     period,
     totals: parseReportTotals(pages),
     sectors: reading.sectors,
+    boundarySectors: reading.boundarySectors,
     duties: reading.duties,
     absences: reading.absences,
     crewRecords: extractCrewRecords(pages),

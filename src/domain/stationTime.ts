@@ -40,6 +40,22 @@ function pinnedOffsetMinutes(zone: string, year: number, month: number, day: num
 }
 
 export function stationLocalDateTimeMs(station: string, date: string, time: string): number | undefined {
+  // A roster can end with a flight that continues beyond the final calendar column. The
+  // view represents the unknown arrival/release honestly as … / —. Give that single UI
+  // sentinel a stable start-of-day anchor so Home history can keep the flight instead of
+  // dropping it; the anchor is never shown as an arrival or release time.
+  if (station.trim() === '…' && time.trim() === '—') {
+    const [year, month, day] = date.split('-').map(Number);
+    const anchor = new Date(Date.UTC(year, month - 1, day));
+    if (
+      !Number.isFinite(anchor.getTime()) ||
+      anchor.getUTCFullYear() !== year ||
+      anchor.getUTCMonth() !== month - 1 ||
+      anchor.getUTCDate() !== day
+    ) return undefined;
+    return anchor.getTime();
+  }
+
   const zone = STATION_TIME_ZONES[station.trim().toUpperCase()];
   if (!zone) return undefined;
   const [year, month, day] = date.split('-').map(Number);
