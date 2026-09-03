@@ -95,7 +95,8 @@ function toCrewMember(member: RosterCrewMember): CrewMember {
     id: member.id,
     name: titleCase(member.name),
     role: flightDeck ? 'Flight deck' : 'Cabin',
-    position: `${member.deadhead ? 'DHC · ' : ''}${rankLabel(member.rank)}`,
+    // Keep the position code exactly as it appears in the roster PDF. Do not infer or expand it.
+    position: `${member.deadhead ? 'DHC · ' : ''}${member.rank}`,
     rosterRank: member.rank,
     deadhead: member.deadhead,
   };
@@ -104,9 +105,6 @@ function toCrewMember(member: RosterCrewMember): CrewMember {
 function crewOrder(a: RosterCrewMember, b: RosterCrewMember): number {
   const weight = (rank: string) => rank === 'CP' ? 0 : rank === 'FO' ? 1 : rank === 'PU' ? 2 : rank === 'IS' ? 3 : 4;
   return weight(a.rank) - weight(b.rank);
-}
-function rankLabel(rank: string): string {
-  return ({ CP: 'Captain', FO: 'First Officer', PU: 'Purser', IS: 'Instructor', FJ: 'FJ', FY: 'FY', PS: 'PS', LI: 'LI' } as Record<string, string>)[rank] ?? rank;
 }
 function titleCase(value: string): string { return value.toLowerCase().replace(/(^|[ -])\p{L}/gu, (letter) => letter.toUpperCase()); }
 
