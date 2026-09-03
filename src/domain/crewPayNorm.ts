@@ -57,8 +57,11 @@ const CREW_PAY_NORM_TIMES: readonly [string, string, number][] = [
   ['SCO', 'NQZ', 161], ['SSH', 'NQZ', 385], ['SSH', 'ALA', 381], ['SYX', 'ALA', 436],
   ['SYX', 'NQZ', 455], ['TAS', 'ALA', 91], ['TAS', 'NQZ', 122], ['TBS', 'ALA', 225],
   ['TBS', 'GUW', 110], ['TBS', 'NQZ', 201], ['TGD', 'ALA', 358], ['TGD', 'NQZ', 341],
+];
 
-  // Confirmed rows from the supplied published CrewPay Norm extract.
+// These additional published rows were supplied specifically for Khava's salary calculation.
+// Keep them isolated from the generic calculator: they are consulted only when Special Mode opts in.
+const SPECIAL_CREW_PAY_NORM_TIMES: readonly [string, string, number][] = [
   ['TLV', 'ALA', 334],
   ['NQZ', 'AKX', 118], ['NQZ', 'ALA', 113], ['NQZ', 'AUH', 318], ['NQZ', 'AYT', 342],
   ['NQZ', 'BJV', 352], ['NQZ', 'BUS', 257], ['NQZ', 'CXR', 485], ['NQZ', 'DAD', 441],
@@ -77,9 +80,11 @@ const CREW_PAY_NORM_TIMES: readonly [string, string, number][] = [
 ];
 
 const normIndex = new Map(CREW_PAY_NORM_TIMES.map(([dep, arr, minutes]) => [`${dep}|${arr}`, minutes]));
+const specialNormIndex = new Map(SPECIAL_CREW_PAY_NORM_TIMES.map(([dep, arr, minutes]) => [`${dep}|${arr}`, minutes]));
 
-export function findCrewPayNormMinutes(dep: string, arr: string): number | undefined {
-  return normIndex.get(`${dep.toUpperCase()}|${arr.toUpperCase()}`);
+export function findCrewPayNormMinutes(dep: string, arr: string, includeSpecial = false): number | undefined {
+  const key = `${dep.toUpperCase()}|${arr.toUpperCase()}`;
+  return (includeSpecial ? specialNormIndex.get(key) : undefined) ?? normIndex.get(key);
 }
 
 export interface CrewPayNormSummary {
@@ -92,12 +97,12 @@ export interface CrewPayNormSummary {
 }
 
 /** Sum CrewPay Norm minutes for operating sectors only. DHC is paid separately. */
-export function crewPayNormForRoster(roster: ParsedAirAstanaRoster): CrewPayNormSummary {
+export function crewPayNormForRoster(roster: ParsedAirAstanaRoster, includeSpecial = false): CrewPayNormSummary {
   let minutes = 0;
   const missingRoutes = new Set<string>();
   for (const sector of roster.sectors) {
     if (sector.deadhead) continue;
-    const norm = findCrewPayNormMinutes(sector.departureAirport, sector.arrivalAirport);
+    const norm = findCrewPayNormMinutes(sector.departureAirport, sector.arrivalAirport, includeSpecial);
     if (norm === undefined) missingRoutes.add(`${sector.departureAirport}–${sector.arrivalAirport}`);
     else minutes += norm;
   }
