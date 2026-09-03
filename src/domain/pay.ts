@@ -1,5 +1,6 @@
 import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
 import { crewPayNormForRoster } from './crewPayNorm';
+import { stationLocalDateTimeMs } from './stationTime';
 
 export interface PayProfile {
   hourlyRate: number;
@@ -78,6 +79,7 @@ export interface PayReadiness {
   ready: boolean;
   missing: string[];
   autoPaidHours?: number;
+  autoDeadheadHours?: number;
   crewPayNormVersion: string;
   crewPayNormAfterStatedPeriod: boolean;
   crewPayNormMissingRoutes: string[];
@@ -125,12 +127,14 @@ export function payReadiness(
   if (!positive(profile?.monthlySalary)) missing.push('monthly salary');
   if (!nonNegative(profile?.monthlyTransport)) missing.push('transport allowance');
 
-  const norm = crewPayNormForRoster(roster, options.includeSpecialCrewPayNorm === true);
+  const specialMode = options.includeSpecialCrewPayNorm === true;
+  const norm = crewPayNormForRoster(roster, specialMode);
   const manualHours = positive(overrides?.paidHours);
   if (!manualHours && !norm.complete) missing.push(`payroll hours (${norm.missingRoutes.join(', ')})`);
 
   const deadheadSectors = roster.sectors.filter((sector) => sector.deadhead).length;
-  if (deadheadSectors > 0 && !nonNegative(overrides?.deadheadHours)) missing.push('deadhead hours');
+  const autoDeadheadHours = specialMode ? deadheadHoursFromRoster(roster) : undefined;
+  if (deadheadSectors > 0 && !nonNegative(overrides?.deadheadHours) && autoDeadheadHours === undefined) missing.push('deadhead hours');
 
   const vacationDays = (roster.absences ?? []).filter((absence) => absence.code === 'VAC').length;
   if (vacationDays > 0 && !nonNegative(overrides?.vacationAmountOverride)) missing.push('vacation pay');
@@ -147,6 +151,7 @@ export function payReadiness(
     ready: missing.length === 0,
     missing,
     autoPaidHours: norm.complete ? norm.hours : undefined,
+    autoDeadheadHours,
     crewPayNormVersion: norm.version,
     crewPayNormAfterStatedPeriod: norm.afterStatedPeriod,
     crewPayNormMissingRoutes: norm.missingRoutes,
@@ -167,7 +172,7 @@ export function calculateRosterPay(
   const manualPaidHours = positive(overrides.paidHours) ? overrides.paidHours : undefined;
   const paidHours = round2(manualPaidHours ?? readiness.autoPaidHours ?? 0);
   const paidHoursSource: PayCalculation['paidHoursSource'] = manualPaidHours === undefined ? 'crewPayNorm' : 'manual';
-  const deadheadHours = round2(overrides.deadheadHours ?? 0);
+  const deadheadHours = round2(overrides.deadheadHours ?? readiness.autoDeadheadHours ?? 0);
   const absences = roster.absences ?? [];
   const sickDays = absences.filter((absence) => absence.code === 'SICK').length;
   const unfitDays = absences.filter((absence) => absence.code === 'UFF').length;
@@ -282,6 +287,38 @@ export function calculateRosterPay(
     holidayLine, officialDayOffLine, sectorLines, deadheadLine, gross, osms, opv, ipnStandardDeduction, ipn,
     totalDeductions, net: round2(gross - totalDeductions),
   };
+}
+
+export function deadheadHoursFromRoster(roster: ParsedAirAstanaRoster): number | undefined {
+  const sectors = roster.sectors.filter((sector) => sector.deadhead);
+  if (sectors.length === 0) return 0;
+
+  let totalMinutes = 0;
+  for (const sector of sectors) {
+    const departureMs = stationLocalDateTimeMs(sector.departureAirport, sector.date, sector.timeOut);
+    if (departureMs === undefined) return undefined;
+
+    let arrivalDate = sector.arrivalDate ?? sector.date;
+    let arrivalMs = stationLocalDateTimeMs(sector.arrivalAirport, arrivalDate, sector.timeIn);
+    if (arrivalMs === undefined) return undefined;
+
+    if (arrivalMs <= departureMs && !sector.arrivalDate) {
+      arrivalDate = nextCalendarDate(sector.date);
+      arrivalMs = stationLocalDateTimeMs(sector.arrivalAirport, arrivalDate, sector.timeIn);
+      if (arrivalMs === undefined) return undefined;
+    }
+
+    const durationMinutes = Math.round((arrivalMs - departureMs) / 60000);
+    if (!Number.isFinite(durationMinutes) || durationMinutes <= 0 || durationMinutes > 24 * 60) return undefined;
+    totalMinutes += durationMinutes;
+  }
+
+  return round2(totalMinutes / 60);
+}
+
+function nextCalendarDate(date: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10);
 }
 
 function unitsInBand(quantity: number, from: number, to: number): number {
