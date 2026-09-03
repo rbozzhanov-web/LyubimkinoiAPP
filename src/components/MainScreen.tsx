@@ -215,9 +215,9 @@ export default function MainScreen() {
           <Text style={[styles.kicker, { color: palette.muted }]}>CABIN CREW COMPANION</Text>
         </View>
         <View style={styles.headerActions}>
-          <Pressable onPress={toggleTheme} style={[styles.modeButton, { backgroundColor: palette.surface }]} accessibilityRole="button" accessibilityLabel={dark ? 'Switch to light theme' : 'Switch to dark theme'}>
+          {lovedMode && <Pressable onPress={toggleTheme} style={[styles.modeButton, { backgroundColor: palette.surface }]} accessibilityRole="button" accessibilityLabel={dark ? 'Switch to light theme' : 'Switch to dark theme'}>
             <Text style={styles.modeGlyph}>{dark ? '🍑' : '🍒'}</Text>
-          </Pressable>
+          </Pressable>}
           <Pressable onPress={requestLovedMode} style={[styles.modeButton, { backgroundColor: lovedMode ? palette.accentSoft : palette.surface, borderColor: lovedMode ? palette.rose : 'transparent', borderWidth: lovedMode ? 1 : 0 }]} accessibilityLabel="Special mode">
             <Text style={styles.modeGlyph}>{lovedMode ? '🌹' : '♡'}</Text>
           </Pressable>
