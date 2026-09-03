@@ -57,6 +57,23 @@ const CREW_PAY_NORM_TIMES: readonly [string, string, number][] = [
   ['SCO', 'NQZ', 161], ['SSH', 'NQZ', 385], ['SSH', 'ALA', 381], ['SYX', 'ALA', 436],
   ['SYX', 'NQZ', 455], ['TAS', 'ALA', 91], ['TAS', 'NQZ', 122], ['TBS', 'ALA', 225],
   ['TBS', 'GUW', 110], ['TBS', 'NQZ', 201], ['TGD', 'ALA', 358], ['TGD', 'NQZ', 341],
+
+  // Confirmed rows from the supplied published CrewPay Norm extract.
+  ['TLV', 'ALA', 334],
+  ['NQZ', 'AKX', 118], ['NQZ', 'ALA', 113], ['NQZ', 'AUH', 318], ['NQZ', 'AYT', 342],
+  ['NQZ', 'BJV', 352], ['NQZ', 'BUS', 257], ['NQZ', 'CXR', 485], ['NQZ', 'DAD', 441],
+  ['NQZ', 'DMB', 106], ['NQZ', 'DME', 236], ['NQZ', 'DOH', 332], ['NQZ', 'DXB', 313],
+  ['NQZ', 'FRA', 481], ['NQZ', 'FRU', 104], ['NQZ', 'GUW', 159], ['NQZ', 'HKT', 479],
+  ['NQZ', 'HRG', 401], ['NQZ', 'ICN', 392], ['NQZ', 'IST', 356], ['NQZ', 'KSN', 83],
+  ['NQZ', 'KBP', 282], ['NQZ', 'KZO', 100], ['NQZ', 'LED', 267], ['NQZ', 'PEK', 327],
+  ['NQZ', 'PLX', 83], ['NQZ', 'PQC', 488], ['NQZ', 'LHR', 516], ['NQZ', 'SCO', 180],
+  ['NQZ', 'SSH', 415], ['NQZ', 'TAS', 131], ['NQZ', 'TBS', 229], ['NQZ', 'TGD', 390],
+  ['NQZ', 'UKK', 91], ['NQZ', 'URA', 151], ['NQZ', 'URC', 157],
+  ['NRT', 'ALA', 542], ['OVB', 'ALA', 166],
+  ['PLX', 'ALA', 95], ['PLX', 'GUW', 130], ['PLX', 'NQZ', 85],
+  ['UBN', 'ALA', 242], ['UKK', 'ALA', 100], ['UKK', 'NQZ', 95],
+  ['URA', 'ALA', 200], ['URA', 'FRA', 395], ['URA', 'NQZ', 132],
+  ['URC', 'ALA', 120], ['URC', 'NQZ', 159],
 ];
 
 const normIndex = new Map(CREW_PAY_NORM_TIMES.map(([dep, arr, minutes]) => [`${dep}|${arr}`, minutes]));
