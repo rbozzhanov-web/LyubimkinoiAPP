@@ -137,10 +137,8 @@ const APP_SHELL_CSS = `
 const REGISTER_SW = `
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
-      const hadController = Boolean(navigator.serviceWorker.controller);
-      let reloadingForUpdate = false;
+      const REVISION_KEY = 'khavair.sw-revision.v1';
       let updateNotified = false;
-      let activationRequested = false;
 
       const specialModeActive = () => {
         try {
@@ -150,32 +148,21 @@ const REGISTER_SW = `
         }
       };
 
-      const notifyAndActivate = (worker) => {
-        if (!hadController || updateNotified || !worker) return;
-        updateNotified = true;
-        window.alert(specialModeActive()
-          ? 'Lyubimochka, a new version is available for you'
-          : 'A new version of KhaVair is available.');
-        activationRequested = true;
-        try { worker.postMessage({ type: 'SKIP_WAITING' }); } catch {}
+      const readStoredRevision = () => {
+        try { return window.localStorage.getItem(REVISION_KEY); } catch { return null; }
       };
 
-      const watchInstallingWorker = (worker) => {
-        if (!worker) return;
-        if (worker.state === 'installed') {
-          notifyAndActivate(worker);
-          return;
-        }
-        worker.addEventListener('statechange', () => {
-          if (worker.state === 'installed') notifyAndActivate(worker);
-        });
+      const storeRevision = (revision) => {
+        try { window.localStorage.setItem(REVISION_KEY, revision); } catch {}
       };
 
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!hadController || !activationRequested || reloadingForUpdate) return;
-        reloadingForUpdate = true;
-        window.location.reload();
-      });
+      const fetchPublishedRevision = async () => {
+        const response = await fetch('sw.js?update-check=' + Date.now(), { cache: 'no-store' });
+        if (!response.ok) return null;
+        const text = await response.text();
+        const match = text.match(/const CACHE = 'khavair-([a-f0-9]+)'/);
+        return match ? match[1] : null;
+      };
 
       try {
         const registration = await navigator.serviceWorker.register('sw.js', {
@@ -183,19 +170,41 @@ const REGISTER_SW = `
           updateViaCache: 'none',
         });
 
-        registration.addEventListener('updatefound', () => watchInstallingWorker(registration.installing));
-
-        // iOS can find/install an update before updatefound is observed by this page.
-        // Always inspect the current lifecycle state immediately after registration as well.
-        if (registration.waiting) notifyAndActivate(registration.waiting);
-        else if (registration.installing) watchInstallingWorker(registration.installing);
-
         const checkForUpdate = async () => {
-          if (!navigator.onLine) return;
+          if (!navigator.onLine || updateNotified) return;
           try {
+            const publishedRevision = await fetchPublishedRevision();
+            if (!publishedRevision) return;
+
+            const storedRevision = readStoredRevision();
+            if (!storedRevision) {
+              // Existing installed PWAs migrate into revision tracking with one notice;
+              // a genuinely first-ever install establishes the baseline silently.
+              if (navigator.serviceWorker.controller) {
+                updateNotified = true;
+                window.alert(specialModeActive()
+                  ? 'Lyubimochka, a new version is available for you'
+                  : 'A new version of KhaVair is available.');
+              }
+              storeRevision(publishedRevision);
+            } else if (storedRevision !== publishedRevision) {
+              updateNotified = true;
+              window.alert(specialModeActive()
+                ? 'Lyubimochka, a new version is available for you'
+                : 'A new version of KhaVair is available.');
+              storeRevision(publishedRevision);
+            }
+
+            // Download/activate the new worker in the background. Do not reload the
+            // current React tree: the new app version is used on the next natural launch.
             await registration.update();
-            if (registration.waiting) notifyAndActivate(registration.waiting);
-            else if (registration.installing) watchInstallingWorker(registration.installing);
+            const worker = registration.waiting || registration.installing;
+            if (worker) {
+              if (worker.state === 'installed') worker.postMessage({ type: 'SKIP_WAITING' });
+              else worker.addEventListener('statechange', () => {
+                if (worker.state === 'installed') worker.postMessage({ type: 'SKIP_WAITING' });
+              });
+            }
           } catch {}
         };
 
