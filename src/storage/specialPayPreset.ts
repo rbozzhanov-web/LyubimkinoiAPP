@@ -12,9 +12,9 @@ const SPECIAL_PAY_PROFILE: PayProfile = {
 const SPECIAL_MONTH_OVERRIDES: Record<string, PayMonthOverrides> = {
   // Known factual July payroll values supplied with the payslip. Sick pay is kept as the
   // issued payslip amount until enough 12-month history exists to calculate it independently.
+  // Deadhead hours are derived automatically from the roster in Special Mode.
   '2026-07': {
     paidHours: 95.43,
-    deadheadHours: 1.72,
     sickAmountOverride: 73214.34,
   },
 };
