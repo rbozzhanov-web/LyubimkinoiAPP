@@ -140,18 +140,39 @@ const REGISTER_SW = `
       const hadController = Boolean(navigator.serviceWorker.controller);
       let reloadingForUpdate = false;
       let updateNotified = false;
+      let activationRequested = false;
 
-      const notifyUpdate = () => {
-        if (!hadController || updateNotified) return;
+      const specialModeActive = () => {
+        try {
+          return window.localStorage.getItem('khavair.loved-mode.v1') === 'active';
+        } catch {
+          return false;
+        }
+      };
+
+      const notifyAndActivate = (worker) => {
+        if (!hadController || updateNotified || !worker) return;
         updateNotified = true;
-        const specialMode = Boolean(document.querySelector('#root [aria-label="KhaVair special mode"]'));
-        window.alert(specialMode
+        window.alert(specialModeActive()
           ? 'Lyubimochka, a new version is available for you'
           : 'A new version of KhaVair is available.');
+        activationRequested = true;
+        try { worker.postMessage({ type: 'SKIP_WAITING' }); } catch {}
+      };
+
+      const watchInstallingWorker = (worker) => {
+        if (!worker) return;
+        if (worker.state === 'installed') {
+          notifyAndActivate(worker);
+          return;
+        }
+        worker.addEventListener('statechange', () => {
+          if (worker.state === 'installed') notifyAndActivate(worker);
+        });
       };
 
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!hadController || reloadingForUpdate) return;
+        if (!hadController || !activationRequested || reloadingForUpdate) return;
         reloadingForUpdate = true;
         window.location.reload();
       });
@@ -162,18 +183,20 @@ const REGISTER_SW = `
           updateViaCache: 'none',
         });
 
-        const watchInstallingWorker = (worker) => {
-          if (!worker) return;
-          worker.addEventListener('statechange', () => {
-            if (worker.state === 'installed') notifyUpdate();
-          });
-        };
-
         registration.addEventListener('updatefound', () => watchInstallingWorker(registration.installing));
 
-        const checkForUpdate = () => {
+        // iOS can find/install an update before updatefound is observed by this page.
+        // Always inspect the current lifecycle state immediately after registration as well.
+        if (registration.waiting) notifyAndActivate(registration.waiting);
+        else if (registration.installing) watchInstallingWorker(registration.installing);
+
+        const checkForUpdate = async () => {
           if (!navigator.onLine) return;
-          registration.update().catch(() => {});
+          try {
+            await registration.update();
+            if (registration.waiting) notifyAndActivate(registration.waiting);
+            else if (registration.installing) watchInstallingWorker(registration.installing);
+          } catch {}
         };
 
         checkForUpdate();

@@ -83,6 +83,10 @@ export interface PayReadiness {
   crewPayNormMissingRoutes: string[];
 }
 
+export interface PayCalculationOptions {
+  includeSpecialCrewPayNorm?: boolean;
+}
+
 export const PAYROLL_RULES = {
   hourBands: [
     { upTo: 60, effectiveMultiplier: 1 },
@@ -114,13 +118,14 @@ export function payReadiness(
   roster: ParsedAirAstanaRoster,
   profile: Partial<PayProfile> | undefined,
   overrides: PayMonthOverrides | undefined,
+  options: PayCalculationOptions = {},
 ): PayReadiness {
   const missing: string[] = [];
   if (!positive(profile?.hourlyRate)) missing.push('hourly rate');
   if (!positive(profile?.monthlySalary)) missing.push('monthly salary');
   if (!nonNegative(profile?.monthlyTransport)) missing.push('transport allowance');
 
-  const norm = crewPayNormForRoster(roster);
+  const norm = crewPayNormForRoster(roster, options.includeSpecialCrewPayNorm === true);
   const manualHours = positive(overrides?.paidHours);
   if (!manualHours && !norm.complete) missing.push(`payroll hours (${norm.missingRoutes.join(', ')})`);
 
@@ -153,8 +158,9 @@ export function calculateRosterPay(
   profile: PayProfile,
   overrides: PayMonthOverrides,
   mrpKzt: number,
+  options: PayCalculationOptions = {},
 ): PayCalculation {
-  const readiness = payReadiness(roster, profile, overrides);
+  const readiness = payReadiness(roster, profile, overrides, options);
   if (!readiness.ready) throw new Error(`Payroll setup incomplete: ${readiness.missing.join(', ')}`);
 
   const rate = profile.hourlyRate;
