@@ -41,7 +41,7 @@ export function rosterToDuties(roster: ParsedAirAstanaRoster): Duty[] {
       reportDate: reportStamp?.[0] ?? first.date,
       releaseDate: releaseStamp?.[0] ?? last.arrivalDate ?? last.date,
       dateLabel: `${String(date.getUTCDate()).padStart(2, '0')} ${MONTHS[date.getUTCMonth()]}`,
-      reportTime: reportStamp?.[1] ?? first.timeOut || '—',
+      reportTime: reportStamp?.[1] ?? (first.timeOut || '—'),
       releaseTime: releaseStamp?.[1] ?? (last.timeIn || '—'),
       sectors,
       layoverStation: last.arrivalAirport || '…',
