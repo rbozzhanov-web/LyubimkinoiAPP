@@ -139,6 +139,16 @@ const REGISTER_SW = `
     window.addEventListener('load', async () => {
       const hadController = Boolean(navigator.serviceWorker.controller);
       let reloadingForUpdate = false;
+      let updateNotified = false;
+
+      const notifyUpdate = () => {
+        if (!hadController || updateNotified) return;
+        updateNotified = true;
+        const specialMode = Boolean(document.querySelector('#root [aria-label="KhaVair special mode"]'));
+        window.alert(specialMode
+          ? 'Lyubimochka, a new version is available for you'
+          : 'A new version of KhaVair is available.');
+      };
 
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (!hadController || reloadingForUpdate) return;
@@ -151,6 +161,15 @@ const REGISTER_SW = `
           scope: './',
           updateViaCache: 'none',
         });
+
+        const watchInstallingWorker = (worker) => {
+          if (!worker) return;
+          worker.addEventListener('statechange', () => {
+            if (worker.state === 'installed') notifyUpdate();
+          });
+        };
+
+        registration.addEventListener('updatefound', () => watchInstallingWorker(registration.installing));
 
         const checkForUpdate = () => {
           if (!navigator.onLine) return;
