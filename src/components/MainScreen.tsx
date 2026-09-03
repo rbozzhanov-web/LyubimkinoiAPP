@@ -17,7 +17,7 @@ import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
 import { clearPayData } from '@/src/storage/payStorage';
 import { clearStoredRosters, loadStoredRosters, removeStoredRoster, upsertStoredRoster } from '@/src/storage/rosterStorage';
 import { activateSpecialPayPreset } from '@/src/storage/specialPayPreset';
-import { clearLovedMode, loadLovedMode, saveLovedMode } from '@/src/storage/lovedModeStorage';
+import { clearLovedMode, loadLovedMode, loadSavedTheme, saveLovedMode, saveTheme, type SavedTheme } from '@/src/storage/lovedModeStorage';
 import { clearCrewProfile, loadCrewProfile, saveCrewProfile } from '@/src/storage/profileStorage';
 
 type Tab = 'Home' | 'Roster' | 'Money' | 'More';
@@ -44,8 +44,9 @@ export default function MainScreen() {
   const { width } = useWindowDimensions();
   const desktopWeb = Platform.OS === 'web' && width >= 768;
   const [hydrated, setHydrated] = useState(Platform.OS !== 'web');
+  const [themeOverride, setThemeOverride] = useState<SavedTheme | undefined>(() => loadSavedTheme());
   useEffect(() => { if (!hydrated) setHydrated(true); }, [hydrated]);
-  const dark = hydrated && scheme === 'dark';
+  const dark = hydrated && (themeOverride ?? scheme) === 'dark';
   const [tab, setTab] = useState<Tab>('Home');
   const [lovedMode, setLovedMode] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
@@ -159,6 +160,11 @@ export default function MainScreen() {
     setUnlockError(false);
     setUnlockOpen(true);
   };
+  const toggleTheme = () => {
+    const next: SavedTheme = dark ? 'light' : 'dark';
+    saveTheme(next);
+    setThemeOverride(next);
+  };
   const submitCode = () => {
     if (!verifyLovedModeCode(unlockCode)) {
       setUnlockError(true);
@@ -208,9 +214,14 @@ export default function MainScreen() {
             : <Text style={[styles.brand, { color: palette.text }]}>KhaVair</Text>}
           <Text style={[styles.kicker, { color: palette.muted }]}>CABIN CREW COMPANION</Text>
         </View>
-        <Pressable onPress={requestLovedMode} style={[styles.modeButton, { backgroundColor: lovedMode ? palette.accentSoft : palette.surface, borderColor: lovedMode ? palette.rose : 'transparent', borderWidth: lovedMode ? 1 : 0 }]} accessibilityLabel="Special mode">
-          <Text style={styles.modeGlyph}>{lovedMode ? '🌹' : '♡'}</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          {lovedMode && <Pressable onPress={toggleTheme} style={[styles.modeButton, { backgroundColor: palette.surface }]} accessibilityRole="button" accessibilityLabel={dark ? 'Switch to light theme' : 'Switch to dark theme'}>
+            <Text style={styles.modeGlyph}>{dark ? '🍑' : '🍒'}</Text>
+          </Pressable>}
+          <Pressable onPress={requestLovedMode} style={[styles.modeButton, { backgroundColor: lovedMode ? palette.accentSoft : palette.surface, borderColor: lovedMode ? palette.rose : 'transparent', borderWidth: lovedMode ? 1 : 0 }]} accessibilityLabel="Special mode">
+            <Text style={styles.modeGlyph}>{lovedMode ? '🌹' : '♡'}</Text>
+          </Pressable>
+        </View>
       </View>
 
       <SwipeSurface style={styles.viewport} onSwipeLeft={tab === 'More' ? undefined : () => changeTab(1)} onSwipeRight={tab === 'Home' ? undefined : () => changeTab(-1)}>
@@ -575,6 +586,7 @@ function operatingCount(roster: ParsedAirAstanaRoster) { return roster.sectors.f
 const styles = StyleSheet.create({
   safe: { flex: 1 }, app: { flex: 1, width: '100%', maxWidth: 620, alignSelf: 'center', paddingHorizontal: 16 },
   header: { height: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, brand: { fontSize: 27, fontWeight: '700', letterSpacing: -.8 }, brandWord: { flexDirection: 'row', alignItems: 'baseline' }, vHeartMark: { width: 25, height: 31, alignItems: 'center', justifyContent: 'center' }, vHeartGlyph: { fontSize: 25, lineHeight: 31, fontWeight: '700' }, kicker: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   modeButton: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }, modeGlyph: { fontSize: 19 },
   viewport: { flex: 1, minHeight: 0 }, screen: { flex: 1, paddingTop: 8, gap: 12 }, grow: { flex: 1, minWidth: 0 },
   sectionTitle: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.8 }, intro: { fontSize: 15, lineHeight: 22 }, label: { fontSize: 11, fontWeight: '700', letterSpacing: .9 }, meta: { fontSize: 13, lineHeight: 18 },
