@@ -5,8 +5,11 @@ import type { RosterCrewMember } from '@/src/import/crew';
 const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 
 export function rosterToDuties(roster: ParsedAirAstanaRoster): Duty[] {
+  const visibleSectors = [...roster.sectors, ...(roster.boundarySectors ?? [])];
   return roster.duties.flatMap((duty) => {
-    const sourceSectors = roster.sectors.filter((sector) => sector.dutyIndex === duty.index);
+    const sourceSectors = visibleSectors
+      .filter((sector) => sector.dutyIndex === duty.index)
+      .sort((a, b) => a.dutySectorIndex - b.dutySectorIndex);
     if (sourceSectors.length === 0) return [];
     const first = sourceSectors[0];
     const last = sourceSectors[sourceSectors.length - 1];
@@ -20,9 +23,9 @@ export function rosterToDuties(roster: ParsedAirAstanaRoster): Duty[] {
         id: `${sector.date}-${sector.flightNumber}-${index}`,
         flightNumber: `KC${sector.flightNumber}`,
         departure: sector.departureAirport,
-        arrival: sector.arrivalAirport,
+        arrival: sector.arrivalAirport || '…',
         departureTime: sector.timeOut,
-        arrivalTime: sector.timeIn,
+        arrivalTime: sector.timeIn || '—',
         blockMinutes: 0,
         crew,
         deadhead: sector.deadhead,
@@ -35,12 +38,12 @@ export function rosterToDuties(roster: ParsedAirAstanaRoster): Duty[] {
       id: `duty-${first.date}-${duty.index}`,
       date: first.date,
       reportDate: reportStamp?.[0] ?? first.date,
-      releaseDate: releaseStamp?.[0] ?? last.date,
+      releaseDate: releaseStamp?.[0] ?? last.arrivalDate ?? last.date,
       dateLabel: `${String(date.getUTCDate()).padStart(2, '0')} ${MONTHS[date.getUTCMonth()]}`,
       reportTime: reportStamp?.[1] ?? first.timeOut,
-      releaseTime: releaseStamp?.[1] ?? last.timeIn,
+      releaseTime: releaseStamp?.[1] ?? last.timeIn || '—',
       sectors,
-      layoverStation: last.arrivalAirport,
+      layoverStation: last.arrivalAirport || '…',
     }];
   });
 }
