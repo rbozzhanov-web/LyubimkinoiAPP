@@ -18,6 +18,10 @@ async function walk(dir) {
 const files = (await walk(root))
   .map((file) => relative(root, file).split(sep).join('/'))
   .filter((file) => file !== 'sw.js' && !file.endsWith('.map'))
+  // upload-pages-artifact omits dotfiles such as Expo's _expo/.routes.json.
+  // Precaching a file that is absent from the deployed artifact makes cache.addAll()
+  // reject the entire install, leaving the PWA without a working offline worker.
+  .filter((file) => !file.split('/').some((segment) => segment.startsWith('.')))
   .sort();
 
 const revision = createHash('sha256')
