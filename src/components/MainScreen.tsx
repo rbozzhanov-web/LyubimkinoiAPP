@@ -120,7 +120,7 @@ export default function MainScreen() {
     accentSoft: lovedMode ? (dark ? '#4A2822' : '#FFD9CC') : (dark ? '#222925' : '#E6ECE8'),
     rose: lovedMode ? '#FF6B6A' : (dark ? '#D79A9F' : '#C23B50'),
     aqua: lovedMode ? '#2BD6C6' : (dark ? '#B5AFA4' : '#5F5C55'),
-    weekend: lovedMode ? (dark ? '#D8B36A' : '#B98A3E') : (dark ? '#DE8580' : '#8B3A3F'),
+    weekend: lovedMode ? '#2E7D63' : (dark ? '#DE8580' : '#8B3A3F'),
     cardGlass: lovedMode ? WEB_CARD_GLASS_LOVED : undefined,
     tabGlass: lovedMode ? WEB_TAB_GLASS_LOVED : undefined,
     sheetGlass: lovedMode ? WEB_SHEET_GLASS_LOVED : undefined,
@@ -434,7 +434,7 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
         renderItem={({ item: { duty, sector } }) => {
           const dateMeta = rosterDateMeta(duty);
           return <Pressable onPress={() => onSelect(sector.id)} style={[styles.rosterCard, palette.cardGlass, { backgroundColor: selectedSector?.id === sector.id ? palette.accentSoft : palette.surfaceStrong, borderColor: palette.line }]}>
-            <View style={styles.flightCardTop}><Text style={[styles.label, { color: dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}</Text><Text style={[styles.flightNumber, { color: palette.muted }]}>{sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text></View>
+            <View style={styles.flightCardTop}><Text style={[styles.label, { color: dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}</Text><Text style={[styles.flightNumber, { color: palette.muted }]}>{sector.flightNumber}{sector.deadhead && <Text style={{ color: palette.aqua }}> · DHC</Text>}</Text></View>
             <Text style={[styles.rosterRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text>
             <Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime} · Report {duty.reportTime}</Text>
           </Pressable>;
@@ -536,7 +536,7 @@ function FlightDetail({ sector, dateLabel, palette, onClose, onPrevious, onNext 
     style={[styles.flightSheet, palette.sheetGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
   >
     <SwipeSurface style={styles.flightSheetContent} onSwipeLeft={onNext} onSwipeRight={onPrevious} threshold={44}>
-      <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text><Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime}</Text></View></View>
+      <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sector.flightNumber}{sector.deadhead && <Text style={{ color: palette.aqua }}> · DHC</Text>}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text><Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime}</Text></View></View>
       <Text style={[styles.swipeHint, { color: palette.muted }]}>{onPrevious ? '‹ ' : ''}swipe flight{onNext ? ' ›' : ''} · swipe down to close</Text>
       <Text style={[styles.flyingWith, { color: palette.accent }]}>Flying with · {sector.crew.length}</Text>
       {sector.crew.length ? <FlatList
