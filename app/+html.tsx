@@ -58,6 +58,7 @@ const REGISTER_SW = `
     window.addEventListener('load', async () => {
       const REVISION_KEY = 'khavair.sw-revision.v1';
       let updateNotified = false;
+      const UPDATE_TITLE = 'Lyubimkina there is a new version available for you';
       // Keep this short and update it with each published version.
       const UPDATE_NOTICE = 'Roster update: OFF/DOFF colours and short relays. Swipe up to close the app, then open it again.';
 
@@ -73,7 +74,7 @@ const REGISTER_SW = `
         try { return window.localStorage.getItem(REVISION_KEY); } catch { return null; }
       };
 
-      const showUpdateNotice = (message) => {
+      const showUpdateNotice = (title, message) => {
         try {
           const loved = specialModeActive();
           let dark = false;
@@ -98,9 +99,13 @@ const REGISTER_SW = `
           card.style.color = palette.text;
           card.style.border = '1px solid ' + palette.border;
 
+          const heading = document.createElement('div');
+          heading.textContent = title;
+          heading.style.cssText = 'font-size:16px;line-height:22px;font-weight:700;margin-bottom:7px;';
+
           const body = document.createElement('div');
           body.textContent = message;
-          body.style.cssText = 'font-size:16px;line-height:22px;font-weight:600;margin-bottom:18px;';
+          body.style.cssText = 'font-size:14px;line-height:20px;font-weight:500;margin-bottom:18px;';
 
           const button = document.createElement('button');
           button.type = 'button';
@@ -110,6 +115,7 @@ const REGISTER_SW = `
           button.style.color = palette.accentText;
           button.onclick = () => backdrop.remove();
 
+          card.appendChild(heading);
           card.appendChild(body);
           card.appendChild(button);
           backdrop.appendChild(card);
@@ -149,12 +155,12 @@ const REGISTER_SW = `
               // a genuinely first-ever install establishes the baseline silently.
               if (navigator.serviceWorker.controller) {
                 updateNotified = true;
-                showUpdateNotice(UPDATE_NOTICE);
+                showUpdateNotice(UPDATE_TITLE, UPDATE_NOTICE);
               }
               storeRevision(publishedRevision);
             } else if (storedRevision !== publishedRevision) {
               updateNotified = true;
-              showUpdateNotice(UPDATE_NOTICE);
+              showUpdateNotice(UPDATE_TITLE, UPDATE_NOTICE);
               storeRevision(publishedRevision);
             }
 

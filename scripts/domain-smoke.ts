@@ -8,7 +8,7 @@ import { clearLovedMode, loadLovedMode, saveLovedMode } from '../src/storage/lov
 import { swipeAxis } from '../src/domain/gesture';
 import type { ExtractedPage, TextItem } from '../src/import/types';
 import { readRoster } from '../src/import/duties';
-import { isDayOffCode, rosterToFlightCardGroups } from '../src/domain/rosterView';
+import { isDayOffCode, rosterToFlightCardGroups, sectorRoute } from '../src/domain/rosterView';
 
 const MRP_2026 = 4325;
 
@@ -147,6 +147,7 @@ const relayCards = rosterToFlightCardGroups([{
 }]);
 equal(relayCards.length, 2, 'a relay under three hours shares one roster card');
 equal(relayCards[0]?.sectors.length, 2, 'both short-relay sectors remain in the card data');
+equal(sectorRoute(relayCards[0]?.sectors ?? []), 'ALA → NQZ → ALA', 'a relay route retains the intermediate station');
 equal(relayCards[1]?.sectors.length, 1, 'a three-hour turnaround starts a new card');
 const overnightCards = rosterToFlightCardGroups([{
   id: 'overnight-duty', date: '2026-07-04', dateLabel: '04 JUL', reportTime: '21:00', releaseTime: '02:00', sectors: [

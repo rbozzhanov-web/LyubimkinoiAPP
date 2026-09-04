@@ -10,7 +10,7 @@ import type { Duty, GroundEvent, Sector } from '@/src/domain/types';
 import { verifyLovedModeCode } from '@/src/domain/lovedMode';
 import { DEFAULT_PROFILE, type CrewProfile } from '@/src/domain/profile';
 import { sumReportedBlockMinutes, sumReportedNightMinutes } from '@/src/domain/layovers';
-import { formatMinutes, rosterMonthLabel, rosterToDuties, rosterToFlightCardGroups, rosterToGroundEvents } from '@/src/domain/rosterView';
+import { formatMinutes, rosterMonthLabel, rosterToDuties, rosterToFlightCardGroups, rosterToGroundEvents, sectorRoute } from '@/src/domain/rosterView';
 import { stationLocalDateTimeMs } from '@/src/domain/stationTime';
 import { pickAndParseRoster } from '@/src/import/pickRoster';
 import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
@@ -463,8 +463,9 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
           const dateMeta = rosterDateMeta(duty);
           const selected = sectors.some((sector) => sector.id === selectedSector?.id);
           return <Pressable onPress={() => onSelect(first.id)} style={[styles.rosterCard, palette.cardGlass, { backgroundColor: selected ? palette.accentSoft : palette.surfaceStrong, borderColor: palette.line }]}>
-            <View style={styles.flightCardTop}><Text style={[styles.label, { color: dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}</Text><Text style={[styles.flightNumber, { color: palette.muted }]}>{sectors.map((sector) => sector.flightNumber).join(' · ')}{sectors.some((sector) => sector.deadhead) && <Text style={{ color: palette.accent }}> · DHC</Text>}</Text></View>
-            <Text style={[styles.rosterRoute, { color: palette.text }]}>{sectors.map((sector, index) => index === 0 ? sector.departure : sector.arrival).join(' → ')}</Text>
+            <View style={styles.flightCardTop}><Text style={[styles.label, { color: dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}</Text></View>
+            <Text style={[styles.flightNumbers, { color: palette.muted }]}>{sectors.map((sector) => `${sector.flightNumber}${sector.deadhead ? ' · DHC' : ''}`).join(' · ')}</Text>
+            <Text style={[styles.rosterRoute, { color: palette.text }]}>{sectorRoute(sectors)}</Text>
             <Text style={[styles.meta, { color: palette.muted }]}>{first.departureTime} – {last.arrivalTime} · Report {duty.reportTime}</Text>
           </Pressable>;
         }} />
@@ -568,7 +569,7 @@ function FlightDetail({ sectors, dateLabel, palette, onClose, onPrevious, onNext
     style={[styles.flightSheet, palette.sheetGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
   >
     <SwipeSurface style={styles.flightSheetContent} onSwipeLeft={onNext} onSwipeRight={onPrevious} threshold={44}>
-      <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sectors.map((sector) => sector.flightNumber).join(' · ')}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sectors.map((sector, index) => index === 0 ? sector.departure : sector.arrival).join(' → ')}</Text><Text style={[styles.meta, { color: palette.muted }]}>{first.departureTime} – {last.arrivalTime}</Text></View></View>
+      <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sectors.map((sector) => sector.flightNumber).join(' · ')}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sectorRoute(sectors)}</Text><Text style={[styles.meta, { color: palette.muted }]}>{first.departureTime} – {last.arrivalTime}</Text></View></View>
       <Text style={[styles.swipeHint, { color: palette.muted }]}>{onPrevious ? '‹ ' : ''}swipe flight{onNext ? ' ›' : ''} · swipe down to close</Text>
       <Text style={[styles.flyingWith, { color: palette.accent }]}>{sectors.length > 1 ? `${sectors.length} flights · ` : ''}Flying with · {crewCount}</Text>
       <FlatList
@@ -643,7 +644,7 @@ function dateMetaFor(isoDate: string | undefined, dateLabel: string): { label: s
   const weekday = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][weekdayIndex];
   return { label: `${dateLabel} · ${weekday}`, weekend: weekdayIndex === 0 || weekdayIndex === 6 };
 }
-function routeChain(duty: Duty): string { return [duty.sectors[0]?.departure, ...duty.sectors.map((sector) => sector.arrival)].filter(Boolean).join(' → '); }
+function routeChain(duty: Duty): string { return sectorRoute(duty.sectors); }
 function TimeCell({ label, value, palette }: { label: string; value: string; palette: Palette }) { return <View style={styles.timeCell}><Text numberOfLines={1} style={[styles.timeLabel, { color: palette.muted }]}>{label}</Text><Text style={[styles.timeValue, { color: palette.text }]}>{value}</Text></View>; }
 function PrimaryButton({ title, onPress, loading, palette }: { title: string; onPress: () => void; loading: boolean; palette: Palette }) { return <Pressable onPress={onPress} disabled={loading} style={[styles.primaryButton, { backgroundColor: palette.accent }]}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionText}>{title}</Text>}</Pressable>; }
 function Summary({ title, value, detail, palette }: { title: string; value: string; detail: string; palette: Palette }) { return <View style={[styles.summary, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.label, { color: palette.muted }]}>{title}</Text><Text style={[styles.summaryValue, { color: palette.text }]}>{value}</Text><Text style={[styles.meta, { color: palette.muted }]}>{detail}</Text></View>; }
@@ -672,7 +673,7 @@ const styles = StyleSheet.create({
   primaryButton: { height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }, actionText: { color: '#fff', fontWeight: '700' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, titleActions: { flexDirection: 'row', gap: 7 }, compactButton: { height: 38, minWidth: 72, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 }, compactText: { fontWeight: '700', fontSize: 12 },
   monthNav: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, monthNavText: { fontSize: 12, fontWeight: '600' }, error: { fontSize: 12 },
-  emptyCard: { borderWidth: 1, borderRadius: 20, padding: 14 }, innerWindow: { flex: 1, minHeight: 0, borderWidth: 1, borderRadius: 20, overflow: 'hidden' }, listContent: { padding: 8, gap: 7, paddingBottom: 18 }, rosterCard: { borderWidth: 1, borderRadius: 16, padding: 13 }, flightCardTop: { flexDirection: 'row', justifyContent: 'space-between' }, flightNumber: { fontSize: 11, fontWeight: '700' }, rosterRoute: { fontSize: 20, fontWeight: '700', marginTop: 4 },
+  emptyCard: { borderWidth: 1, borderRadius: 20, padding: 14 }, innerWindow: { flex: 1, minHeight: 0, borderWidth: 1, borderRadius: 20, overflow: 'hidden' }, listContent: { padding: 8, gap: 7, paddingBottom: 18 }, rosterCard: { borderWidth: 1, borderRadius: 16, padding: 13 }, flightCardTop: { flexDirection: 'row', justifyContent: 'space-between' }, flightNumber: { fontSize: 11, fontWeight: '700' }, flightNumbers: { fontSize: 11, lineHeight: 16, fontWeight: '700', marginTop: 4, flexShrink: 1 }, rosterRoute: { fontSize: 20, lineHeight: 25, fontWeight: '700', marginTop: 5 },
   infoCard: { borderWidth: 1, borderRadius: 20, padding: 14, gap: 3 }, cardTitle: { fontSize: 15, fontWeight: '700' }, settingsCard: { minHeight: 68, borderWidth: 1, borderRadius: 20, padding: 14, flexDirection: 'row', alignItems: 'center' }, chevron: { fontSize: 30 }, secondaryButton: { height: 48, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, secondaryText: { fontWeight: '600' },
   libraryCard: { borderWidth: 1, borderRadius: 20, padding: 14, minHeight: 88, maxHeight: 190 }, libraryList: { marginTop: 5 }, libraryRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth }, libraryMonth: { fontSize: 14, fontWeight: '700' }, deleteRosterButton: { minWidth: 58, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 }, deleteRosterText: { fontSize: 11, fontWeight: '700' },
   depthSurface: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 24, elevation: 5 },

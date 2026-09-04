@@ -70,6 +70,12 @@ export function rosterToDuties(roster: ParsedAirAstanaRoster): Duty[] {
 
 export type FlightCardGroup = { id: string; duty: Duty; sectors: Sector[] };
 
+/** Every arrival belongs in the displayed chain, including an intermediate turn. */
+export function sectorRoute(sectors: Sector[]): string {
+  const first = sectors[0];
+  return first ? [first.departure, ...sectors.map((sector) => sector.arrival)].join(' → ') : '…';
+}
+
 /**
  * Keep a same-duty relay on one roster card when the turnaround is shorter than
  * three hours. The original sectors are retained so their times, crew and DHC
