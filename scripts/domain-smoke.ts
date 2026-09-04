@@ -8,7 +8,7 @@ import { clearLovedMode, loadLovedMode, saveLovedMode } from '../src/storage/lov
 import { swipeAxis } from '../src/domain/gesture';
 import type { ExtractedPage, TextItem } from '../src/import/types';
 import { readRoster } from '../src/import/duties';
-import { isDayOffCode } from '../src/domain/rosterView';
+import { isDayOffCode, rosterToFlightCardGroups } from '../src/domain/rosterView';
 
 const MRP_2026 = 4325;
 
@@ -135,6 +135,19 @@ equal(groundReading.absences.length, 1, 'only the payroll-relevant code becomes 
 equal(groundReading.absences[0]?.code, 'SICK', 'SICK is both a ground duty and a payroll absence');
 equal(isDayOffCode('OFF'), true, 'OFF is a day-off code');
 equal(isDayOffCode('SICK'), false, 'SICK is a payroll absence, not a day-off code');
+
+// The roster list keeps short same-station relays compact, but never drops the
+// underlying sector records needed for their individual times and crew.
+const relayCards = rosterToFlightCardGroups([{
+  id: 'relay-duty', date: '2026-07-04', dateLabel: '04 JUL', reportTime: '08:00', releaseTime: '18:00', sectors: [
+    { id: 'one', date: '2026-07-04', flightNumber: 'KC101', departure: 'ALA', arrival: 'NQZ', departureTime: '09:00', arrivalTime: '10:30', blockMinutes: 0, crew: [] },
+    { id: 'two', date: '2026-07-04', flightNumber: 'KC102', departure: 'NQZ', arrival: 'ALA', departureTime: '12:15', arrivalTime: '13:45', blockMinutes: 0, crew: [] },
+    { id: 'three', date: '2026-07-04', flightNumber: 'KC103', departure: 'ALA', arrival: 'CIT', departureTime: '16:45', arrivalTime: '18:00', blockMinutes: 0, crew: [] },
+  ],
+}]);
+equal(relayCards.length, 2, 'a relay under three hours shares one roster card');
+equal(relayCards[0]?.sectors.length, 2, 'both short-relay sectors remain in the card data');
+equal(relayCards[1]?.sectors.length, 1, 'a three-hour turnaround starts a new card');
 
 // Anonymous salary example locks the confirmed cabin-crew tariff bands without storing personal data.
 const roster: ParsedAirAstanaRoster = {

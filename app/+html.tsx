@@ -58,6 +58,8 @@ const REGISTER_SW = `
     window.addEventListener('load', async () => {
       const REVISION_KEY = 'khavair.sw-revision.v1';
       let updateNotified = false;
+      // Keep this short and update it with each published version.
+      const UPDATE_NOTICE = 'Roster update: OFF/DOFF colours and short relays. Swipe up to close the app, then open it again.';
 
       const specialModeActive = () => {
         try {
@@ -147,16 +149,12 @@ const REGISTER_SW = `
               // a genuinely first-ever install establishes the baseline silently.
               if (navigator.serviceWorker.controller) {
                 updateNotified = true;
-                showUpdateNotice(specialModeActive()
-                  ? 'Lyubimochka, a new version is available for you'
-                  : 'A new version of KhaVair is available.');
+                showUpdateNotice(UPDATE_NOTICE);
               }
               storeRevision(publishedRevision);
             } else if (storedRevision !== publishedRevision) {
               updateNotified = true;
-              showUpdateNotice(specialModeActive()
-                ? 'Lyubimochka, a new version is available for you'
-                : 'A new version of KhaVair is available.');
+              showUpdateNotice(UPDATE_NOTICE);
               storeRevision(publishedRevision);
             }
 

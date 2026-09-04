@@ -10,7 +10,7 @@ import type { Duty, GroundEvent, Sector } from '@/src/domain/types';
 import { verifyLovedModeCode } from '@/src/domain/lovedMode';
 import { DEFAULT_PROFILE, type CrewProfile } from '@/src/domain/profile';
 import { sumReportedBlockMinutes, sumReportedNightMinutes } from '@/src/domain/layovers';
-import { formatMinutes, isDayOffCode, rosterMonthLabel, rosterToDuties, rosterToGroundEvents } from '@/src/domain/rosterView';
+import { formatMinutes, rosterMonthLabel, rosterToDuties, rosterToFlightCardGroups, rosterToGroundEvents } from '@/src/domain/rosterView';
 import { stationLocalDateTimeMs } from '@/src/domain/stationTime';
 import { pickAndParseRoster } from '@/src/import/pickRoster';
 import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
@@ -28,13 +28,13 @@ const TAB_ICONS: Record<Tab, { glyph: string; size: number; nudge: number; weigh
   Money: { glyph: '₸', size: 22, nudge: 0, weight: '800' },
   More: { glyph: '•••', size: 18, nudge: -2, weight: '700' },
 };
-type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua'|'aquaTint'|'aquaBorder'|'weekend', string> & {
+type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua'|'aquaTint'|'aquaBorder'|'forest'|'forestTint'|'forestBorder'|'weekend', string> & {
   cardGlass?: any;
   tabGlass?: any;
   sheetGlass?: any;
 };
-type FlightRow = { duty: Duty; sector: Sector };
-type RosterRow = { kind: 'flight'; key: string; sortKey: string; duty: Duty; sector: Sector } | { kind: 'ground'; key: string; sortKey: string; event: GroundEvent };
+type FlightCardRow = { id: string; duty: Duty; sectors: Sector[] };
+type RosterRow = { kind: 'flight'; key: string; sortKey: string; card: FlightCardRow } | { kind: 'ground'; key: string; sortKey: string; event: GroundEvent };
 type RosterDuty = { roster: ParsedAirAstanaRoster; duty: Duty };
 type FocusDuty = RosterDuty & { reportMs: number; releaseMs: number };
 const WEB_GLASS = Platform.OS === 'web'
@@ -123,7 +123,10 @@ export default function MainScreen() {
     aqua: lovedMode ? '#2BD6C6' : (dark ? '#B5AFA4' : '#5F5C55'),
     aquaTint: lovedMode ? (dark ? 'rgba(43,214,198,.16)' : 'rgba(43,214,198,.12)') : (dark ? 'rgba(181,175,164,.14)' : 'rgba(95,92,85,.10)'),
     aquaBorder: lovedMode ? (dark ? 'rgba(43,214,198,.35)' : 'rgba(43,214,198,.32)') : (dark ? 'rgba(181,175,164,.30)' : 'rgba(95,92,85,.26)'),
-    weekend: lovedMode ? '#2E7D63' : (dark ? '#DE8580' : '#8B3A3F'),
+    forest: lovedMode ? '#2E7D63' : (dark ? '#7CA893' : '#356952'),
+    forestTint: lovedMode ? (dark ? 'rgba(46,125,99,.22)' : 'rgba(46,125,99,.14)') : (dark ? 'rgba(124,168,147,.16)' : 'rgba(53,105,82,.10)'),
+    forestBorder: lovedMode ? (dark ? 'rgba(46,125,99,.45)' : 'rgba(46,125,99,.34)') : (dark ? 'rgba(124,168,147,.32)' : 'rgba(53,105,82,.26)'),
+    weekend: lovedMode ? '#D3916A' : (dark ? '#DE8580' : '#8B3A3F'),
     cardGlass: lovedMode ? WEB_CARD_GLASS_LOVED : undefined,
     tabGlass: lovedMode ? WEB_TAB_GLASS_LOVED : undefined,
     sheetGlass: lovedMode ? WEB_SHEET_GLASS_LOVED : undefined,
@@ -401,14 +404,14 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
 function RosterScreen({ roster, rosters, duties, selectedSector, palette, profile, importing, error, onImport, onSelect, onMonth }: { roster?: ParsedAirAstanaRoster; rosters: ParsedAirAstanaRoster[]; duties: Duty[]; selectedSector?: Sector; palette: Palette; profile: CrewProfile; importing: boolean; error?: string; onImport: () => void; onSelect: (id?: string) => void; onMonth: (direction: -1 | 1) => void }) {
   const [calendarState, setCalendarState] = useState<'idle'|'working'|'done'|'error'>('idle');
   const index = roster ? rosters.findIndex((item) => item.period.start === roster.period.start) : -1;
-  const flights = useMemo<FlightRow[]>(() => duties.flatMap((duty) => duty.sectors.map((sector) => ({ duty, sector }))), [duties]);
-  const selectedIndex = selectedSector ? flights.findIndex(({ sector }) => sector.id === selectedSector.id) : -1;
+  const flights = useMemo<FlightCardRow[]>(() => rosterToFlightCardGroups(duties), [duties]);
+  const selectedIndex = selectedSector ? flights.findIndex((card) => card.sectors.some((sector) => sector.id === selectedSector.id)) : -1;
   const selectedRow = selectedIndex >= 0 ? flights[selectedIndex] : undefined;
   const groundEvents = useMemo(() => roster ? rosterToGroundEvents(roster) : [], [roster]);
   const rows = useMemo<RosterRow[]>(() => {
-    const flightRows: RosterRow[] = flights.map(({ duty, sector }) => ({
-      kind: 'flight', key: sector.id, duty, sector,
-      sortKey: `${duty.date ?? ''}T${sector.departureTime !== '—' ? sector.departureTime : '00:00'}`,
+    const flightRows: RosterRow[] = flights.map((card) => ({
+      kind: 'flight', key: card.id, card,
+      sortKey: `${card.duty.date ?? ''}T${card.sectors[0]?.departureTime !== '—' ? card.sectors[0]?.departureTime : '00:00'}`,
     }));
     const groundRows: RosterRow[] = groundEvents.map((event) => ({
       kind: 'ground', key: event.id, event, sortKey: `${event.date}T00:00`,
@@ -448,23 +451,26 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
         renderItem={({ item: row }) => {
           if (row.kind === 'ground') {
             const dateMeta = dateMetaFor(row.event.date, row.event.dateLabel);
-            const dayOff = isDayOffCode(row.event.code);
-            return <View style={[styles.rosterCard, palette.cardGlass, { backgroundColor: dayOff ? palette.aquaTint : palette.surfaceStrong, borderColor: dayOff ? palette.aquaBorder : palette.line }]}>
+            const highlight = row.event.code === 'OFF' ? 'aqua' : row.event.code === 'DOFF' ? 'forest' : undefined;
+            return <View style={[styles.rosterCard, palette.cardGlass, { backgroundColor: highlight === 'aqua' ? palette.aquaTint : highlight === 'forest' ? palette.forestTint : palette.surfaceStrong, borderColor: highlight === 'aqua' ? palette.aquaBorder : highlight === 'forest' ? palette.forestBorder : palette.line }]}>
               <View style={styles.flightCardTop}><Text style={[styles.label, { color: dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}</Text></View>
-              <Text style={[styles.rosterRoute, { color: dayOff ? palette.aqua : palette.text }]}>{row.event.code}</Text>
+              <Text style={[styles.rosterRoute, { color: highlight === 'aqua' ? palette.aqua : highlight === 'forest' ? palette.forest : palette.text }]}>{row.event.code}</Text>
             </View>;
           }
-          const { duty, sector } = row;
+          const { duty, sectors } = row.card;
+          const first = sectors[0]!;
+          const last = sectors.at(-1)!;
           const dateMeta = rosterDateMeta(duty);
-          return <Pressable onPress={() => onSelect(sector.id)} style={[styles.rosterCard, palette.cardGlass, { backgroundColor: selectedSector?.id === sector.id ? palette.accentSoft : palette.surfaceStrong, borderColor: palette.line }]}>
-            <View style={styles.flightCardTop}><Text style={[styles.label, { color: dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}</Text><Text style={[styles.flightNumber, { color: palette.muted }]}>{sector.flightNumber}{sector.deadhead && <Text style={{ color: palette.aqua }}> · DHC</Text>}</Text></View>
-            <Text style={[styles.rosterRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text>
-            <Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime} · Report {duty.reportTime}</Text>
+          const selected = sectors.some((sector) => sector.id === selectedSector?.id);
+          return <Pressable onPress={() => onSelect(first.id)} style={[styles.rosterCard, palette.cardGlass, { backgroundColor: selected ? palette.accentSoft : palette.surfaceStrong, borderColor: palette.line }]}>
+            <View style={styles.flightCardTop}><Text style={[styles.label, { color: dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}</Text><Text style={[styles.flightNumber, { color: palette.muted }]}>{sectors.map((sector) => sector.flightNumber).join(' · ')}{sectors.some((sector) => sector.deadhead) && <Text style={{ color: palette.accent }}> · DHC</Text>}</Text></View>
+            <Text style={[styles.rosterRoute, { color: palette.text }]}>{sectors.map((sector, index) => index === 0 ? sector.departure : sector.arrival).join(' → ')}</Text>
+            <Text style={[styles.meta, { color: palette.muted }]}>{first.departureTime} – {last.arrivalTime} · Report {duty.reportTime}</Text>
           </Pressable>;
         }} />
     </View>}
 
-    {selectedRow && <FlightDetail sector={selectedRow.sector} dateLabel={selectedRow.duty.dateLabel} palette={palette} onClose={() => onSelect(undefined)} onPrevious={selectedIndex > 0 ? () => onSelect(flights[selectedIndex - 1].sector.id) : undefined} onNext={selectedIndex < flights.length - 1 ? () => onSelect(flights[selectedIndex + 1].sector.id) : undefined} />}
+    {selectedRow && <FlightDetail sectors={selectedRow.sectors} dateLabel={selectedRow.duty.dateLabel} palette={palette} onClose={() => onSelect(undefined)} onPrevious={selectedIndex > 0 ? () => onSelect(flights[selectedIndex - 1].sectors[0]!.id) : undefined} onNext={selectedIndex < flights.length - 1 ? () => onSelect(flights[selectedIndex + 1].sectors[0]!.id) : undefined} />}
   </View>;
 }
 
@@ -546,9 +552,12 @@ function MoreScreen({ rosters, profile, palette, onDeleteRoster, onProfileChange
   </View>;
 }
 
-function FlightDetail({ sector, dateLabel, palette, onClose, onPrevious, onNext }: { sector: Sector; dateLabel: string; palette: Palette; onClose: () => void; onPrevious?: () => void; onNext?: () => void }) {
+function FlightDetail({ sectors, dateLabel, palette, onClose, onPrevious, onNext }: { sectors: Sector[]; dateLabel: string; palette: Palette; onClose: () => void; onPrevious?: () => void; onNext?: () => void }) {
   const [scrollAtTop, setScrollAtTop] = useState(true);
-  useEffect(() => setScrollAtTop(true), [sector.id]);
+  const first = sectors[0]!;
+  const last = sectors.at(-1)!;
+  const crewCount = sectors.reduce((total, sector) => total + sector.crew.length, 0);
+  useEffect(() => setScrollAtTop(true), [first.id]);
 
   return <IOSSheet
     visible
@@ -559,12 +568,12 @@ function FlightDetail({ sector, dateLabel, palette, onClose, onPrevious, onNext 
     style={[styles.flightSheet, palette.sheetGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
   >
     <SwipeSurface style={styles.flightSheetContent} onSwipeLeft={onNext} onSwipeRight={onPrevious} threshold={44}>
-      <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sector.flightNumber}{sector.deadhead && <Text style={{ color: palette.aqua }}> · DHC</Text>}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text><Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime}</Text></View></View>
+      <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sectors.map((sector) => sector.flightNumber).join(' · ')}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sectors.map((sector, index) => index === 0 ? sector.departure : sector.arrival).join(' → ')}</Text><Text style={[styles.meta, { color: palette.muted }]}>{first.departureTime} – {last.arrivalTime}</Text></View></View>
       <Text style={[styles.swipeHint, { color: palette.muted }]}>{onPrevious ? '‹ ' : ''}swipe flight{onNext ? ' ›' : ''} · swipe down to close</Text>
-      <Text style={[styles.flyingWith, { color: palette.accent }]}>Flying with · {sector.crew.length}</Text>
-      {sector.crew.length ? <FlatList
-        data={sector.crew}
-        keyExtractor={(member) => member.id}
+      <Text style={[styles.flyingWith, { color: palette.accent }]}>{sectors.length > 1 ? `${sectors.length} flights · ` : ''}Flying with · {crewCount}</Text>
+      <FlatList
+        data={sectors.flatMap((sector) => [{ type: 'sector' as const, sector }, ...sector.crew.map((member) => ({ type: 'crew' as const, sector, member }))])}
+        keyExtractor={(item) => item.type === 'sector' ? `sector-${item.sector.id}` : `${item.sector.id}-${item.member.id}`}
         style={styles.crewScroll}
         nestedScrollEnabled
         showsVerticalScrollIndicator={false}
@@ -574,8 +583,11 @@ function FlightDetail({ sector, dateLabel, palette, onClose, onPrevious, onNext 
         windowSize={5}
         scrollEventThrottle={16}
         onScroll={(event) => setScrollAtTop(event.nativeEvent.contentOffset.y <= 1)}
-        renderItem={({ item }) => <View style={styles.crewRow}><View style={[styles.avatar, { backgroundColor: palette.accentSoft }]}><Text style={[styles.avatarText, { color: palette.accent }]}>{item.name[0]}</Text></View><View style={styles.grow}><Text style={[styles.crewName, { color: palette.text }]}>{item.name}</Text><Text style={[styles.meta, { color: palette.muted }]}>{item.position ?? item.rosterRank ?? item.role}</Text></View></View>}
-      /> : <Text style={[styles.meta, { color: palette.muted }]}>Crew is not listed for this flight in the imported report.</Text>}
+        renderItem={({ item }) => item.type === 'sector'
+          ? <View style={styles.flightSegment}><Text style={[styles.flightNumber, { color: palette.accent }]}>{item.sector.flightNumber}{item.sector.deadhead && <Text style={{ color: palette.accent }}> · DHC</Text>}</Text><Text style={[styles.meta, { color: palette.muted }]}>{item.sector.departure} → {item.sector.arrival} · {item.sector.departureTime} – {item.sector.arrivalTime}</Text></View>
+          : <View style={styles.crewRow}><View style={[styles.avatar, { backgroundColor: palette.accentSoft }]}><Text style={[styles.avatarText, { color: palette.accent }]}>{item.member.name[0]}</Text></View><View style={styles.grow}><Text style={[styles.crewName, { color: palette.text }]}>{item.member.name}</Text><Text style={[styles.meta, { color: palette.muted }]}>{item.member.position ?? item.member.rosterRank ?? item.member.role}</Text></View></View>}
+      />
+      {crewCount === 0 && <Text style={[styles.meta, { color: palette.muted }]}>Crew is not listed for these flights in the imported report.</Text>}
     </SwipeSurface>
   </IOSSheet>;
 }
@@ -665,7 +677,7 @@ const styles = StyleSheet.create({
   libraryCard: { borderWidth: 1, borderRadius: 20, padding: 14, minHeight: 88, maxHeight: 190 }, libraryList: { marginTop: 5 }, libraryRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth }, libraryMonth: { fontSize: 14, fontWeight: '700' }, deleteRosterButton: { minWidth: 58, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 }, deleteRosterText: { fontSize: 11, fontWeight: '700' },
   depthSurface: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 24, elevation: 5 },
   tabBar: { height: 68, marginTop: 8, marginBottom: 4, borderWidth: 1, borderRadius: 22, flexDirection: 'row' }, tabSelection: { position: 'absolute', left: 4, top: 4, bottom: 4, borderRadius: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 2 }, tabItem: { flex: 1, zIndex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabIconWrap: { minWidth: 35, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, tabIcon: { textAlign: 'center' }, tabText: { fontSize: 11, fontWeight: '600' },
-  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end' }, flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderTopWidth: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 18, paddingBottom: 12, overflow: 'hidden' }, flightSheetContent: { minHeight: 0, flexShrink: 1 }, sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }, sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 }, swipeHint: { fontSize: 10, marginTop: 7 }, flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 7 }, crewScroll: { minHeight: 0, flexShrink: 1 }, crewList: { paddingBottom: 12 }, crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' }, avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, avatarText: { fontSize: 12, fontWeight: '800' }, crewName: { fontSize: 14, fontWeight: '600' },
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end' }, flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderTopWidth: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 18, paddingBottom: 12, overflow: 'hidden' }, flightSheetContent: { minHeight: 0, flexShrink: 1 }, sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }, sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 }, swipeHint: { fontSize: 10, marginTop: 7 }, flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 7 }, crewScroll: { minHeight: 0, flexShrink: 1 }, crewList: { paddingBottom: 12 }, flightSegment: { marginTop: 8, marginBottom: 3 }, crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' }, avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, avatarText: { fontSize: 12, fontWeight: '800' }, crewName: { fontSize: 14, fontWeight: '600' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.56)', alignItems: 'center', justifyContent: 'center', padding: 20 }, unlockCard: { width: '100%', maxWidth: 390, borderWidth: 1, borderRadius: 26, padding: 20 }, unlockTitle: { fontSize: 26, fontWeight: '700', marginTop: 7 }, codeInput: { height: 54, borderWidth: 1, borderRadius: 15, marginTop: 18, paddingHorizontal: 16, fontSize: 22, letterSpacing: 5, textAlign: 'center' }, codeHint: { fontSize: 11, lineHeight: 15, marginTop: 6 }, codeExample: { fontSize: 11, lineHeight: 15, marginTop: 2 }, actions: { flexDirection: 'row', gap: 9, marginTop: 18 }, action: { flex: 1, height: 46, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   confirmCard: { width: '100%', maxWidth: 390, borderWidth: 1, borderRadius: 26, padding: 20 }, confirmTitle: { fontSize: 24, lineHeight: 29, fontWeight: '700', marginTop: 6, marginBottom: 8 }, profileInput: { height: 50, borderWidth: 1, borderRadius: 14, marginTop: 15, paddingHorizontal: 14, fontSize: 17, fontWeight: '600' },
 });

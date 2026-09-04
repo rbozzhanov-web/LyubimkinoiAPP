@@ -11,6 +11,8 @@ export type CrewMember = {
 
 export type Sector = {
   id: string;
+  /** Local departure calendar date from the roster, YYYY-MM-DD. */
+  date: string;
   flightNumber: string;
   departure: string;
   arrival: string;

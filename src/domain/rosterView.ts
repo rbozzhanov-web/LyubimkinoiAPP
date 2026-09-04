@@ -40,6 +40,7 @@ export function rosterToDuties(roster: ParsedAirAstanaRoster): Duty[] {
         .map(toCrewMember) ?? [];
       return {
         id: `${sector.date}-${sector.flightNumber}-${index}`,
+        date: sector.date,
         flightNumber: `KC${sector.flightNumber}`,
         departure: sector.departureAirport || '…',
         arrival: sector.arrivalAirport || '…',
@@ -65,6 +66,54 @@ export function rosterToDuties(roster: ParsedAirAstanaRoster): Duty[] {
       layoverStation: last.arrivalAirport || '…',
     }];
   });
+}
+
+export type FlightCardGroup = { id: string; duty: Duty; sectors: Sector[] };
+
+/**
+ * Keep a same-duty relay on one roster card when the turnaround is shorter than
+ * three hours. The original sectors are retained so their times, crew and DHC
+ * status remain available in the detail sheet.
+ */
+export function rosterToFlightCardGroups(duties: Duty[]): FlightCardGroup[] {
+  return duties.flatMap((duty) => {
+    const groups: Sector[][] = [];
+    for (const sector of duty.sectors) {
+      const current = groups.at(-1);
+      if (current && isShortRelay(current.at(-1)!, sector)) current.push(sector);
+      else groups.push([sector]);
+    }
+    return groups.map((sectors) => ({
+      id: `card-${sectors.map((sector) => sector.id).join('-')}`,
+      duty,
+      sectors,
+    }));
+  });
+}
+
+function isShortRelay(previous: Sector, next: Sector): boolean {
+  if (previous.arrival !== next.departure) return false;
+  const arrival = clockMinutes(previous.arrivalTime);
+  const departure = clockMinutes(next.departureTime);
+  if (arrival === undefined || departure === undefined) return false;
+  const dayGap = utcDayDifference(previous.date, next.date);
+  if (dayGap < 0 || dayGap > 1) return false;
+  const turnaround = departure + dayGap * 24 * 60 - arrival;
+  return turnaround >= 0 && turnaround < 3 * 60;
+}
+
+function clockMinutes(value: string): number | undefined {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value);
+  if (!match) return undefined;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours < 24 && minutes < 60 ? hours * 60 + minutes : undefined;
+}
+
+function utcDayDifference(first: string, second: string): number {
+  const start = Date.parse(`${first}T00:00:00Z`);
+  const end = Date.parse(`${second}T00:00:00Z`);
+  return Number.isFinite(start) && Number.isFinite(end) ? Math.round((end - start) / 86_400_000) : NaN;
 }
 
 // Rosters parsed before the month-boundary fix did not persist a final sector when its
