@@ -126,6 +126,17 @@ export default function MainScreen() {
     sheetGlass: lovedMode ? WEB_SHEET_GLASS_LOVED : undefined,
   }), [dark, lovedMode]);
 
+  useEffect(() => {
+    // The HTML shell's own background (behind #root, e.g. the safe-area/status-bar strip
+    // and overscroll bounce) is CSS-only and can only react to the OS color scheme — it
+    // has no way to see the manual Special Mode theme override. Once React is up, mirror
+    // the resolved palette onto it directly so the whole screen always matches, even when
+    // the manual override diverges from the OS scheme.
+    if (typeof document === 'undefined') return;
+    document.body.style.backgroundColor = palette.background;
+    document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute('content', palette.background));
+  }, [palette.background]);
+
   const importRoster = async () => {
     setImportError(undefined);
     setImporting(true);
