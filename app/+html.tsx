@@ -19,7 +19,21 @@ const PRODUCTION_CSP = [
 const APP_SHELL_CSS = `
   html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; touch-action: manipulation; }
   html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
-  #root { height: calc(100dvh - 2.8mm); min-height: calc(100dvh - 2.8mm); transform: translateY(2.8mm); isolation: isolate; }
+  /*
+   * This nudge was tuned by hand over several commits (1mm -> 2mm -> 2.5mm -> 2.8mm) as a
+   * fixed, device-independent constant. That undershoots on Dynamic Island phones, where the
+   * status bar is drawn as glass reaching lower than env(safe-area-inset-top) reports -- the
+   * same effect the OFP viewer app documents and fixes with a ~24px cushion on top of the
+   * inset for exactly this reason. SafeAreaView already applies the raw inset as padding, so
+   * this is that same extra cushion, expressed in px instead of a fixed physical unit.
+   *
+   * The !important on height is load-bearing: expo-router's own ScrollViewStyleReset renders
+   * after this block and also sets #root's height to 100% at equal specificity, so without it
+   * the height reduction below silently loses the cascade (verified via computed styles) and
+   * #root overflows the viewport by the translateY amount, relying on the parent's
+   * overflow:hidden to hide it instead of actually being sized to fit.
+   */
+  #root { height: calc(100dvh - 24px) !important; min-height: calc(100dvh - 24px); transform: translateY(24px); isolation: isolate; }
   #root * { -webkit-overflow-scrolling: touch; }
   html * { scrollbar-width: none; -ms-overflow-style: none; }
   html *::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
