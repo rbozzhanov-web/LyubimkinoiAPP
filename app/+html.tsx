@@ -57,6 +57,52 @@ const REGISTER_SW = `
         try { return window.localStorage.getItem(REVISION_KEY); } catch { return null; }
       };
 
+      const showUpdateNotice = (message) => {
+        try {
+          const loved = specialModeActive();
+          let dark = false;
+          try { dark = window.matchMedia('(prefers-color-scheme: dark)').matches; } catch {}
+          if (loved) {
+            const savedTheme = window.localStorage.getItem('khavair.theme.v1');
+            if (savedTheme === 'dark') dark = true;
+            else if (savedTheme === 'light') dark = false;
+          }
+          const palette = loved
+            ? (dark ? { bg: '#3A2A24', text: '#FFF3EC', border: 'rgba(255,230,225,.16)', accent: '#FF6B6A', accentText: '#FFFFFF' }
+                    : { bg: '#FFF7F2', text: '#2B1F1B', border: 'rgba(43,31,27,.12)', accent: '#FF6B6A', accentText: '#FFFFFF' })
+            : (dark ? { bg: '#242220', text: '#F7F4EF', border: 'rgba(247,244,239,.16)', accent: '#C7BDAE', accentText: '#171714' }
+                    : { bg: '#FCFAF7', text: '#171714', border: 'rgba(47,57,52,.14)', accent: '#2F3934', accentText: '#FCFAF7' });
+
+          const backdrop = document.createElement('div');
+          backdrop.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.5);';
+
+          const card = document.createElement('div');
+          card.style.cssText = 'max-width:340px;width:100%;border-radius:20px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.28);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
+          card.style.background = palette.bg;
+          card.style.color = palette.text;
+          card.style.border = '1px solid ' + palette.border;
+
+          const body = document.createElement('div');
+          body.textContent = message;
+          body.style.cssText = 'font-size:16px;line-height:22px;font-weight:600;margin-bottom:18px;';
+
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = 'OK';
+          button.style.cssText = 'width:100%;height:46px;border:none;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;';
+          button.style.background = palette.accent;
+          button.style.color = palette.accentText;
+          button.onclick = () => backdrop.remove();
+
+          card.appendChild(body);
+          card.appendChild(button);
+          backdrop.appendChild(card);
+          document.body.appendChild(backdrop);
+        } catch {
+          window.alert(message);
+        }
+      };
+
       const storeRevision = (revision) => {
         try { window.localStorage.setItem(REVISION_KEY, revision); } catch {}
       };
@@ -87,14 +133,14 @@ const REGISTER_SW = `
               // a genuinely first-ever install establishes the baseline silently.
               if (navigator.serviceWorker.controller) {
                 updateNotified = true;
-                window.alert(specialModeActive()
+                showUpdateNotice(specialModeActive()
                   ? 'Lyubimochka, a new version is available for you'
                   : 'A new version of KhaVair is available.');
               }
               storeRevision(publishedRevision);
             } else if (storedRevision !== publishedRevision) {
               updateNotified = true;
-              window.alert(specialModeActive()
+              showUpdateNotice(specialModeActive()
                 ? 'Lyubimochka, a new version is available for you'
                 : 'A new version of KhaVair is available.');
               storeRevision(publishedRevision);
