@@ -5,7 +5,7 @@ import type { PayMonthOverrides, PayProfile } from '@/src/domain/pay';
 import { loadPayMonth, loadPayProfile, savePayMonth, savePayProfile } from '@/src/storage/payStorage';
 import { IOSSheet } from './IOSOverlay';
 
-type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua', string>;
+type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua', string> & { sheetGlass?: any };
 
 type Draft = {
   hourlyRate: string;
@@ -72,7 +72,7 @@ export function SalarySettingsSheet({ visible, roster, palette, onClose, onSaved
     onClose={onClose}
     handleColor={palette.line}
     scrollAtTop={scrollAtTop}
-    style={[styles.sheet, { backgroundColor: palette.background, borderColor: palette.line }]}
+    style={[styles.sheet, palette.sheetGlass, { backgroundColor: palette.background, borderColor: palette.line }]}
   >
     {(dismiss) => <>
       <View style={styles.header}>
