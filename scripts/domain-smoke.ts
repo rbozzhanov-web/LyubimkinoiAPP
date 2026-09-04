@@ -148,6 +148,13 @@ const relayCards = rosterToFlightCardGroups([{
 equal(relayCards.length, 2, 'a relay under three hours shares one roster card');
 equal(relayCards[0]?.sectors.length, 2, 'both short-relay sectors remain in the card data');
 equal(relayCards[1]?.sectors.length, 1, 'a three-hour turnaround starts a new card');
+const overnightCards = rosterToFlightCardGroups([{
+  id: 'overnight-duty', date: '2026-07-04', dateLabel: '04 JUL', reportTime: '21:00', releaseTime: '02:00', sectors: [
+    { id: 'late', date: '2026-07-04', flightNumber: 'KC201', departure: 'ALA', arrival: 'NQZ', departureTime: '22:00', arrivalTime: '23:30', blockMinutes: 0, crew: [] },
+    { id: 'early', date: '2026-07-05', flightNumber: 'KC202', departure: 'NQZ', arrival: 'ALA', departureTime: '00:45', arrivalTime: '02:15', blockMinutes: 0, crew: [] },
+  ],
+}]);
+equal(overnightCards.length, 2, 'a short overnight turn stays on separate calendar days');
 
 // Anonymous salary example locks the confirmed cabin-crew tariff bands without storing personal data.
 const roster: ParsedAirAstanaRoster = {

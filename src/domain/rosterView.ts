@@ -93,12 +93,13 @@ export function rosterToFlightCardGroups(duties: Duty[]): FlightCardGroup[] {
 
 function isShortRelay(previous: Sector, next: Sector): boolean {
   if (previous.arrival !== next.departure) return false;
+  // A card must never cross a calendar-day boundary: day-based roster logic,
+  // sorting and labels remain authoritative even for a short overnight turn.
+  if (previous.date !== next.date) return false;
   const arrival = clockMinutes(previous.arrivalTime);
   const departure = clockMinutes(next.departureTime);
   if (arrival === undefined || departure === undefined) return false;
-  const dayGap = utcDayDifference(previous.date, next.date);
-  if (dayGap < 0 || dayGap > 1) return false;
-  const turnaround = departure + dayGap * 24 * 60 - arrival;
+  const turnaround = departure - arrival;
   return turnaround >= 0 && turnaround < 3 * 60;
 }
 
@@ -108,12 +109,6 @@ function clockMinutes(value: string): number | undefined {
   const hours = Number(match[1]);
   const minutes = Number(match[2]);
   return hours < 24 && minutes < 60 ? hours * 60 + minutes : undefined;
-}
-
-function utcDayDifference(first: string, second: string): number {
-  const start = Date.parse(`${first}T00:00:00Z`);
-  const end = Date.parse(`${second}T00:00:00Z`);
-  return Number.isFinite(start) && Number.isFinite(end) ? Math.round((end - start) / 86_400_000) : NaN;
 }
 
 // Rosters parsed before the month-boundary fix did not persist a final sector when its
