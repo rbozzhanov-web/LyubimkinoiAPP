@@ -35,6 +35,14 @@ export type Duty = {
   layoverStation?: string;
 };
 
+/** A non-flying roster day (OFF, DOFF, SICK, AVLB, ...), shown with its raw code. */
+export type GroundEvent = {
+  id: string;
+  date: string;
+  dateLabel: string;
+  code: string;
+};
+
 /**
  * Per-diem tariff buckets, not geographic continents:
  * - KZ: Kazakhstan, 3 MRP when the UTC qualification rule is met;

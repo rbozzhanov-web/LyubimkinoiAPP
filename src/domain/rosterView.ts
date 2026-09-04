@@ -1,9 +1,28 @@
-import type { Duty, CrewMember, Sector } from './types';
+import type { Duty, CrewMember, GroundEvent, Sector } from './types';
 import { getSectorCrew, type ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
 import type { RosterCrewMember } from '@/src/import/crew';
 import type { RosterSector } from '@/src/import/duties';
 
 const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
+// Rest/available codes that take a crew member off flying without being a payroll absence
+// (see the PAYROLL_ABSENCE_CODES comment in src/import/duties.ts for the payslip-verified split).
+const DAY_OFF_CODES = new Set(['OFF', 'DOFF', 'ROFF', 'BOFF', 'AVLB', 'HOMS']);
+export function isDayOffCode(code: string): boolean { return DAY_OFF_CODES.has(code); }
+
+export function rosterToGroundEvents(roster: ParsedAirAstanaRoster): GroundEvent[] {
+  return (roster.groundDuties ?? []).map((item, index) => ({
+    id: `ground-${item.date}-${item.code}-${index}`,
+    date: item.date,
+    dateLabel: formatDateLabel(item.date),
+    code: item.code,
+  }));
+}
+
+function formatDateLabel(date: string): string {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return `${String(parsed.getUTCDate()).padStart(2, '0')} ${MONTHS[parsed.getUTCMonth()]}`;
+}
 
 export function rosterToDuties(roster: ParsedAirAstanaRoster): Duty[] {
   const visibleSectors = [...roster.sectors, ...(roster.boundarySectors ?? []), ...legacyBoundarySectors(roster)];
@@ -14,7 +33,6 @@ export function rosterToDuties(roster: ParsedAirAstanaRoster): Duty[] {
     if (sourceSectors.length === 0) return [];
     const first = sourceSectors[0];
     const last = sourceSectors[sourceSectors.length - 1];
-    const date = new Date(`${first.date}T00:00:00Z`);
     const sectors: Sector[] = sourceSectors.map((sector, index) => {
       const crew = getSectorCrew(roster, sector)?.members
         .filter((member) => member.id !== roster.subject?.staffId)
@@ -40,7 +58,7 @@ export function rosterToDuties(roster: ParsedAirAstanaRoster): Duty[] {
       date: first.date,
       reportDate: reportStamp?.[0] ?? first.date,
       releaseDate: releaseStamp?.[0] ?? last.arrivalDate ?? last.date,
-      dateLabel: `${String(date.getUTCDate()).padStart(2, '0')} ${MONTHS[date.getUTCMonth()]}`,
+      dateLabel: formatDateLabel(first.date),
       reportTime: reportStamp?.[1] ?? (first.timeOut || '—'),
       releaseTime: releaseStamp?.[1] ?? (last.timeIn || '—'),
       sectors,

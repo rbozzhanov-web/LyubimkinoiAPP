@@ -1,5 +1,5 @@
 import { extractCrewRecords, crewForSector, type CrewRecord } from './crew';
-import { readRoster, type RosterAbsence, type RosterDuty, type RosterSector } from './duties';
+import { readRoster, type RosterAbsence, type RosterDuty, type RosterGroundDuty, type RosterSector } from './duties';
 import { extractDayColumns, type DayColumn } from './grid';
 import { parsePeriod, parseReportTotals, parseSubject, type ReportPeriod, type ReportSubject, type ReportTotals } from './header';
 import type { ExtractedPage } from './types';
@@ -13,6 +13,8 @@ export interface ParsedAirAstanaRoster {
   boundarySectors?: RosterSector[];
   duties: RosterDuty[];
   absences: RosterAbsence[];
+  /** Optional: absent on rosters stored before this field existed. */
+  groundDuties?: RosterGroundDuty[];
   crewRecords: CrewRecord[];
   unreadCells: string[];
 }
@@ -32,6 +34,7 @@ export function parseAirAstanaRoster(pages: ExtractedPage[]): ParsedAirAstanaRos
     boundarySectors: reading.boundarySectors,
     duties: reading.duties,
     absences: reading.absences,
+    groundDuties: reading.groundDuties,
     crewRecords: extractCrewRecords(pages),
     unreadCells: reading.unreadCells,
   };

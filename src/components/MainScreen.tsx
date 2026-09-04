@@ -6,11 +6,11 @@ import { SalarySettingsSheet } from './SalarySettingsSheet';
 import { SwipeSurface } from './SwipeSurface';
 import { IOSSheet } from './IOSOverlay';
 import { exportRosterCalendar } from '@/src/domain/calendar';
-import type { Duty, Sector } from '@/src/domain/types';
+import type { Duty, GroundEvent, Sector } from '@/src/domain/types';
 import { verifyLovedModeCode } from '@/src/domain/lovedMode';
 import { DEFAULT_PROFILE, type CrewProfile } from '@/src/domain/profile';
 import { sumReportedBlockMinutes, sumReportedNightMinutes } from '@/src/domain/layovers';
-import { formatMinutes, rosterMonthLabel, rosterToDuties } from '@/src/domain/rosterView';
+import { formatMinutes, isDayOffCode, rosterMonthLabel, rosterToDuties, rosterToGroundEvents } from '@/src/domain/rosterView';
 import { stationLocalDateTimeMs } from '@/src/domain/stationTime';
 import { pickAndParseRoster } from '@/src/import/pickRoster';
 import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
@@ -28,12 +28,13 @@ const TAB_ICONS: Record<Tab, { glyph: string; size: number; nudge: number; weigh
   Money: { glyph: '₸', size: 22, nudge: 0, weight: '800' },
   More: { glyph: '•••', size: 18, nudge: -2, weight: '700' },
 };
-type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua'|'weekend', string> & {
+type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua'|'aquaTint'|'aquaBorder'|'weekend', string> & {
   cardGlass?: any;
   tabGlass?: any;
   sheetGlass?: any;
 };
 type FlightRow = { duty: Duty; sector: Sector };
+type RosterRow = { kind: 'flight'; key: string; sortKey: string; duty: Duty; sector: Sector } | { kind: 'ground'; key: string; sortKey: string; event: GroundEvent };
 type RosterDuty = { roster: ParsedAirAstanaRoster; duty: Duty };
 type FocusDuty = RosterDuty & { reportMs: number; releaseMs: number };
 const WEB_GLASS = Platform.OS === 'web'
@@ -120,6 +121,8 @@ export default function MainScreen() {
     accentSoft: lovedMode ? (dark ? '#4A2822' : '#FFD9CC') : (dark ? '#222925' : '#E6ECE8'),
     rose: lovedMode ? '#FF6B6A' : (dark ? '#D79A9F' : '#C23B50'),
     aqua: lovedMode ? '#2BD6C6' : (dark ? '#B5AFA4' : '#5F5C55'),
+    aquaTint: lovedMode ? (dark ? 'rgba(43,214,198,.16)' : 'rgba(43,214,198,.12)') : (dark ? 'rgba(181,175,164,.14)' : 'rgba(95,92,85,.10)'),
+    aquaBorder: lovedMode ? (dark ? 'rgba(43,214,198,.35)' : 'rgba(43,214,198,.32)') : (dark ? 'rgba(181,175,164,.30)' : 'rgba(95,92,85,.26)'),
     weekend: lovedMode ? (dark ? '#D8B36A' : '#B98A3E') : (dark ? '#DE8580' : '#8B3A3F'),
     cardGlass: lovedMode ? WEB_CARD_GLASS_LOVED : undefined,
     tabGlass: lovedMode ? WEB_TAB_GLASS_LOVED : undefined,
@@ -401,6 +404,17 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
   const flights = useMemo<FlightRow[]>(() => duties.flatMap((duty) => duty.sectors.map((sector) => ({ duty, sector }))), [duties]);
   const selectedIndex = selectedSector ? flights.findIndex(({ sector }) => sector.id === selectedSector.id) : -1;
   const selectedRow = selectedIndex >= 0 ? flights[selectedIndex] : undefined;
+  const groundEvents = useMemo(() => roster ? rosterToGroundEvents(roster) : [], [roster]);
+  const rows = useMemo<RosterRow[]>(() => {
+    const flightRows: RosterRow[] = flights.map(({ duty, sector }) => ({
+      kind: 'flight', key: sector.id, duty, sector,
+      sortKey: `${duty.date ?? ''}T${sector.departureTime !== '—' ? sector.departureTime : '00:00'}`,
+    }));
+    const groundRows: RosterRow[] = groundEvents.map((event) => ({
+      kind: 'ground', key: event.id, event, sortKey: `${event.date}T00:00`,
+    }));
+    return [...flightRows, ...groundRows].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  }, [flights, groundEvents]);
   useEffect(() => setCalendarState('idle'), [roster?.period.start]);
 
   const exportCalendar = async () => {
@@ -430,8 +444,17 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
     {error && <Text style={[styles.error, { color: palette.rose }]}>{error}</Text>}
 
     {!roster ? <View style={[styles.emptyCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster PDF to begin.</Text></View> : <View style={[styles.innerWindow, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-      <FlatList data={flights} keyExtractor={({ sector }) => sector.id} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}
-        renderItem={({ item: { duty, sector } }) => {
+      <FlatList data={rows} keyExtractor={(row) => row.key} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}
+        renderItem={({ item: row }) => {
+          if (row.kind === 'ground') {
+            const dateMeta = dateMetaFor(row.event.date, row.event.dateLabel);
+            const dayOff = isDayOffCode(row.event.code);
+            return <View style={[styles.rosterCard, palette.cardGlass, { backgroundColor: dayOff ? palette.aquaTint : palette.surfaceStrong, borderColor: dayOff ? palette.aquaBorder : palette.line }]}>
+              <View style={styles.flightCardTop}><Text style={[styles.label, { color: dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}</Text></View>
+              <Text style={[styles.rosterRoute, { color: dayOff ? palette.aqua : palette.text }]}>{row.event.code}</Text>
+            </View>;
+          }
+          const { duty, sector } = row;
           const dateMeta = rosterDateMeta(duty);
           return <Pressable onPress={() => onSelect(sector.id)} style={[styles.rosterCard, palette.cardGlass, { backgroundColor: selectedSector?.id === sector.id ? palette.accentSoft : palette.surfaceStrong, borderColor: palette.line }]}>
             <View style={styles.flightCardTop}><Text style={[styles.label, { color: dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}</Text><Text style={[styles.flightNumber, { color: palette.muted }]}>{sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text></View>
@@ -595,15 +618,18 @@ function formatCountdown(milliseconds: number): string {
   return days > 0 ? `${days}d ${clock}` : clock;
 }
 function rosterDateMeta(duty: Duty): { label: string; weekend: boolean } {
-  if (!duty.date) return { label: duty.dateLabel, weekend: false };
-  const [year, month, day] = duty.date.split('-').map(Number);
+  return dateMetaFor(duty.date, duty.dateLabel);
+}
+function dateMetaFor(isoDate: string | undefined, dateLabel: string): { label: string; weekend: boolean } {
+  if (!isoDate) return { label: dateLabel, weekend: false };
+  const [year, month, day] = isoDate.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
   if (!Number.isFinite(date.getTime()) || date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
-    return { label: duty.dateLabel, weekend: false };
+    return { label: dateLabel, weekend: false };
   }
   const weekdayIndex = date.getUTCDay();
   const weekday = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][weekdayIndex];
-  return { label: `${duty.dateLabel} · ${weekday}`, weekend: weekdayIndex === 0 || weekdayIndex === 6 };
+  return { label: `${dateLabel} · ${weekday}`, weekend: weekdayIndex === 0 || weekdayIndex === 6 };
 }
 function routeChain(duty: Duty): string { return [duty.sectors[0]?.departure, ...duty.sectors.map((sector) => sector.arrival)].filter(Boolean).join(' → '); }
 function TimeCell({ label, value, palette }: { label: string; value: string; palette: Palette }) { return <View style={styles.timeCell}><Text numberOfLines={1} style={[styles.timeLabel, { color: palette.muted }]}>{label}</Text><Text style={[styles.timeValue, { color: palette.text }]}>{value}</Text></View>; }
