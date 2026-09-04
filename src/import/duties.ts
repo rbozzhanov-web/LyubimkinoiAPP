@@ -8,7 +8,9 @@ export interface RosterSector {
 }
 export interface RosterDuty { index: number; start?: string; end?: string; sectorCount: number }
 export interface RosterAbsence { code: 'SICK' | 'UFF' | 'VAC' | 'CHLD'; date: string }
-export interface RosterReading { sectors: RosterSector[]; boundarySectors: RosterSector[]; duties: RosterDuty[]; absences: RosterAbsence[]; unreadCells: string[] }
+/** A non-flying roster day (OFF, DOFF, SICK, AVLB, ...) kept as its raw code for display. */
+export interface RosterGroundDuty { code: string; date: string }
+export interface RosterReading { sectors: RosterSector[]; boundarySectors: RosterSector[]; duties: RosterDuty[]; absences: RosterAbsence[]; groundDuties: RosterGroundDuty[]; unreadCells: string[] }
 const DELAY_LABEL = 'Delay';
 const GROUND_DUTY_CODE_RE = /^[A-Z][A-Z0-9_]{1,7}$/;
 // Codes that take a day out of the salary and transport month. Verified against four
@@ -22,6 +24,7 @@ export function readRoster(columns: DayColumn[], periodStart: string, periodEnd:
   const boundarySectors: RosterSector[] = [];
   const duties: RosterDuty[] = [];
   const absences: RosterAbsence[] = [];
+  const groundDuties: RosterGroundDuty[] = [];
   const unreadCells: string[] = [];
   let carried: RosterSector | undefined;
   let currentDuty: RosterDuty | undefined;
@@ -47,6 +50,7 @@ export function readRoster(columns: DayColumn[], periodStart: string, periodEnd:
         if (PAYROLL_ABSENCE_CODES.has(cell as RosterAbsence['code'])) {
           absences.push({ code: cell as RosterAbsence['code'], date });
         }
+        groundDuties.push({ code: cell, date });
         i += 1; while (i < cells.length && isPlainTime(cells[i])) i += 1;
         currentDuty = undefined; continue;
       }
@@ -87,7 +91,7 @@ export function readRoster(columns: DayColumn[], periodStart: string, periodEnd:
   // whose grid is not part of this PDF. Keep that known partial sector for roster/history UI
   // instead of silently dropping the flight. It stays separate from payroll/layover sectors.
   if (carried) boundarySectors.push(carried);
-  return { sectors, boundarySectors, duties, absences, unreadCells };
+  return { sectors, boundarySectors, duties, absences, groundDuties, unreadCells };
 }
 
 function readSector(cells: string[], start: number, date: string, duty: RosterDuty): { sector: RosterSector; next: number; continues: boolean } | undefined {

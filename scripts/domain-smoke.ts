@@ -7,6 +7,8 @@ import { stationLocalDateTimeMs } from '../src/domain/stationTime';
 import { clearLovedMode, loadLovedMode, saveLovedMode } from '../src/storage/lovedModeStorage';
 import { swipeAxis } from '../src/domain/gesture';
 import type { ExtractedPage, TextItem } from '../src/import/types';
+import { readRoster } from '../src/import/duties';
+import { isDayOffCode } from '../src/domain/rosterView';
 
 const MRP_2026 = 4325;
 
@@ -114,6 +116,25 @@ const continuedCrew = extractCrewRecords(crewPages);
 equal(continuedCrew.length, 2, 'crew table continues across pages');
 equal(continuedCrew[1]?.flightNumber, '916', 'continued page flight');
 equal(continuedCrew[1]?.members.length, 2, 'continued page crew members');
+
+// Ground-duty codes (day off, standby, sick, ...) are read from the same grid cells as
+// flight sectors but must never become sectors themselves, and must survive as their raw
+// code rather than being silently discarded.
+const groundReading = readRoster(
+  [
+    { label: '04/07', cells: ['OFF'] },
+    { label: '05/07', cells: ['SICK'] },
+  ],
+  '2026-07-01', '2026-07-31',
+);
+equal(groundReading.sectors.length, 0, 'ground-duty codes never become flight sectors');
+equal(groundReading.groundDuties.length, 2, 'both ground-duty days are captured');
+equal(groundReading.groundDuties[0]?.code, 'OFF', 'raw ground-duty code is preserved, not expanded');
+equal(groundReading.groundDuties[0]?.date, '2026-07-04', 'ground-duty day keeps its resolved calendar date');
+equal(groundReading.absences.length, 1, 'only the payroll-relevant code becomes an absence');
+equal(groundReading.absences[0]?.code, 'SICK', 'SICK is both a ground duty and a payroll absence');
+equal(isDayOffCode('OFF'), true, 'OFF is a day-off code');
+equal(isDayOffCode('SICK'), false, 'SICK is a payroll absence, not a day-off code');
 
 // Anonymous salary example locks the confirmed cabin-crew tariff bands without storing personal data.
 const roster: ParsedAirAstanaRoster = {
