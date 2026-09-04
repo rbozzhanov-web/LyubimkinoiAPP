@@ -17,7 +17,7 @@ import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
 import { clearPayData } from '@/src/storage/payStorage';
 import { clearStoredRosters, loadStoredRosters, removeStoredRoster, upsertStoredRoster } from '@/src/storage/rosterStorage';
 import { activateSpecialPayPreset } from '@/src/storage/specialPayPreset';
-import { clearLovedMode, loadLovedMode, loadSavedTheme, saveLovedMode, saveTheme, type SavedTheme } from '@/src/storage/lovedModeStorage';
+import { clearLovedMode, clearSavedTheme, loadLovedMode, loadSavedTheme, saveLovedMode, saveTheme, type SavedTheme } from '@/src/storage/lovedModeStorage';
 import { clearCrewProfile, loadCrewProfile, saveCrewProfile } from '@/src/storage/profileStorage';
 
 type Tab = 'Home' | 'Roster' | 'Money' | 'More';
@@ -178,8 +178,9 @@ export default function MainScreen() {
     setUnlockOpen(true);
   };
   const toggleTheme = () => {
-    const next: SavedTheme = dark ? 'light' : 'dark';
-    saveTheme(next);
+    // Cycles Light -> Dark -> System (follows the OS scheme) -> Light...
+    const next: SavedTheme | undefined = themeOverride === undefined ? 'light' : themeOverride === 'light' ? 'dark' : undefined;
+    if (next === undefined) clearSavedTheme(); else saveTheme(next);
     setThemeOverride(next);
   };
   const submitCode = () => {
@@ -232,8 +233,8 @@ export default function MainScreen() {
           <Text style={[styles.kicker, { color: palette.muted }]}>CABIN CREW COMPANION</Text>
         </View>
         <View style={styles.headerActions}>
-          {lovedMode && <Pressable onPress={toggleTheme} style={[styles.modeButton, { backgroundColor: palette.surface }]} accessibilityRole="button" accessibilityLabel={dark ? 'Switch to light theme' : 'Switch to dark theme'}>
-            <Text style={styles.modeGlyph}>{dark ? '🍑' : '🍒'}</Text>
+          {lovedMode && <Pressable onPress={toggleTheme} style={[styles.modeButton, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface }]} accessibilityRole="button" accessibilityLabel={themeOverride === undefined ? 'Switch to light theme' : themeOverride === 'light' ? 'Switch to dark theme' : 'Switch to system theme'}>
+            <Text style={[styles.modeGlyph, themeOverride === undefined && styles.modeGlyphPair]}>{themeOverride === undefined ? '🍑🍒' : themeOverride === 'dark' ? '🍑' : '🍒'}</Text>
           </Pressable>}
           <Pressable onPress={requestLovedMode} style={[styles.modeButton, { backgroundColor: lovedMode ? palette.accentSoft : palette.surface, borderColor: lovedMode ? palette.rose : 'transparent', borderWidth: lovedMode ? 1 : 0 }]} accessibilityLabel="Special mode">
             <Text style={styles.modeGlyph}>{lovedMode ? '🌹' : '♡'}</Text>
@@ -604,7 +605,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1 }, app: { flex: 1, width: '100%', maxWidth: 620, alignSelf: 'center', paddingHorizontal: 16 },
   header: { height: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, brand: { fontSize: 27, fontWeight: '700', letterSpacing: -.8 }, brandWord: { flexDirection: 'row', alignItems: 'baseline' }, vHeartMark: { width: 25, height: 31, alignItems: 'center', justifyContent: 'center' }, vHeartGlyph: { fontSize: 25, lineHeight: 31, fontWeight: '700' }, kicker: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  modeButton: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }, modeGlyph: { fontSize: 19 },
+  modeButton: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }, modeGlyph: { fontSize: 19 }, modeGlyphPair: { fontSize: 13, letterSpacing: -3 },
   viewport: { flex: 1, minHeight: 0 }, screen: { flex: 1, paddingTop: 8, gap: 12 }, grow: { flex: 1, minWidth: 0 },
   sectionTitle: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.8 }, intro: { fontSize: 15, lineHeight: 22 }, label: { fontSize: 11, fontWeight: '700', letterSpacing: .9 }, meta: { fontSize: 13, lineHeight: 18 },
   dutyHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
