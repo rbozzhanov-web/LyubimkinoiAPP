@@ -28,7 +28,11 @@ const TAB_ICONS: Record<Tab, { glyph: string; size: number; nudge: number; weigh
   Money: { glyph: '₸', size: 22, nudge: 0, weight: '800' },
   More: { glyph: '•••', size: 18, nudge: -2, weight: '700' },
 };
-type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua'|'weekend', string>;
+type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua'|'weekend', string> & {
+  cardGlass?: any;
+  tabGlass?: any;
+  sheetGlass?: any;
+};
 type FlightRow = { duty: Duty; sector: Sector };
 type RosterDuty = { roster: ParsedAirAstanaRoster; duty: Duty };
 type FocusDuty = RosterDuty & { reportMs: number; releaseMs: number };
@@ -37,6 +41,16 @@ const WEB_GLASS = Platform.OS === 'web'
   : undefined;
 const WEB_TAB_GLASS = Platform.OS === 'web'
   ? ({ backdropFilter: 'blur(30px) saturate(1.38)', WebkitBackdropFilter: 'blur(30px) saturate(1.38)' } as any)
+  : undefined;
+// Special Mode glass recipes (card/tab/sheet), matching the Kha♥air glass material spec.
+const WEB_CARD_GLASS_LOVED = Platform.OS === 'web'
+  ? ({ backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)' } as any)
+  : undefined;
+const WEB_TAB_GLASS_LOVED = Platform.OS === 'web'
+  ? ({ backdropFilter: 'blur(32px) saturate(1.5)', WebkitBackdropFilter: 'blur(32px) saturate(1.5)' } as any)
+  : undefined;
+const WEB_SHEET_GLASS_LOVED = Platform.OS === 'web'
+  ? ({ backdropFilter: 'blur(28px) saturate(1.4)', WebkitBackdropFilter: 'blur(28px) saturate(1.4)' } as any)
   : undefined;
 
 export default function MainScreen() {
@@ -96,17 +110,20 @@ export default function MainScreen() {
   const codeShakeX = shakeAnim.interpolate({ inputRange: [-1, 0, 1], outputRange: [-7, 0, 7] });
 
   const palette = useMemo<Palette>(() => ({
-    background: lovedMode ? (dark ? '#1B1114' : '#FFF0E8') : (dark ? '#11110F' : '#F4F1EC'),
-    surface: lovedMode ? (dark ? 'rgba(36,23,26,.76)' : 'rgba(255,247,242,.76)') : (dark ? 'rgba(27,26,24,.78)' : 'rgba(252,250,247,.78)'),
-    surfaceStrong: lovedMode ? (dark ? 'rgba(44,27,32,.84)' : 'rgba(255,255,255,.84)') : (dark ? 'rgba(37,35,31,.84)' : 'rgba(255,255,255,.84)'),
-    text: lovedMode ? (dark ? '#FFF5F2' : '#2B1718') : (dark ? '#F7F4EF' : '#171714'),
-    muted: lovedMode ? (dark ? '#DCB2AB' : '#5C3D37') : (dark ? '#B5AFA4' : '#4A4540'),
-    line: lovedMode ? (dark ? 'rgba(255,213,205,.14)' : 'rgba(122,74,69,.12)') : (dark ? 'rgba(247,244,239,.12)' : 'rgba(47,57,52,.10)'),
-    accent: lovedMode ? '#F06445' : (dark ? '#C7BDAE' : '#2F3934'),
-    accentSoft: lovedMode ? (dark ? '#44231F' : '#FFD8C9') : (dark ? '#222925' : '#E6ECE8'),
-    rose: lovedMode ? '#DE466D' : (dark ? '#D79A9F' : '#C23B50'),
-    aqua: lovedMode ? '#2EC5D2' : (dark ? '#B5AFA4' : '#5F5C55'),
-    weekend: lovedMode ? (dark ? '#D88C82' : '#963A3F') : (dark ? '#DE8580' : '#8B3A3F'),
+    background: lovedMode ? (dark ? '#2B1F1B' : '#FFE6E1') : (dark ? '#11110F' : '#F4F1EC'),
+    surface: lovedMode ? (dark ? 'rgba(58,42,37,.76)' : 'rgba(255,247,242,.76)') : (dark ? 'rgba(27,26,24,.78)' : 'rgba(252,250,247,.78)'),
+    surfaceStrong: lovedMode ? (dark ? 'rgba(58,42,37,.90)' : 'rgba(255,247,242,.90)') : (dark ? 'rgba(37,35,31,.84)' : 'rgba(255,255,255,.84)'),
+    text: lovedMode ? (dark ? '#FFF3EC' : '#2B1F1B') : (dark ? '#F7F4EF' : '#171714'),
+    muted: lovedMode ? (dark ? '#D9AFA0' : '#7A5347') : (dark ? '#B5AFA4' : '#4A4540'),
+    line: lovedMode ? (dark ? 'rgba(255,230,225,.14)' : 'rgba(43,31,27,.10)') : (dark ? 'rgba(247,244,239,.12)' : 'rgba(47,57,52,.10)'),
+    accent: lovedMode ? '#FF9A7A' : (dark ? '#C7BDAE' : '#2F3934'),
+    accentSoft: lovedMode ? (dark ? '#4A2822' : '#FFD9CC') : (dark ? '#222925' : '#E6ECE8'),
+    rose: lovedMode ? '#FF6B6A' : (dark ? '#D79A9F' : '#C23B50'),
+    aqua: lovedMode ? '#2BD6C6' : (dark ? '#B5AFA4' : '#5F5C55'),
+    weekend: lovedMode ? (dark ? '#D8B36A' : '#B98A3E') : (dark ? '#DE8580' : '#8B3A3F'),
+    cardGlass: lovedMode ? WEB_CARD_GLASS_LOVED : undefined,
+    tabGlass: lovedMode ? WEB_TAB_GLASS_LOVED : undefined,
+    sheetGlass: lovedMode ? WEB_SHEET_GLASS_LOVED : undefined,
   }), [dark, lovedMode]);
 
   const importRoster = async () => {
@@ -236,7 +253,7 @@ export default function MainScreen() {
           const nextWidth = event.nativeEvent.layout.width;
           if (Math.abs(nextWidth - tabBarWidth) > 0.5) setTabBarWidth(nextWidth);
         }}
-        style={[styles.tabBar, styles.depthSurface, WEB_TAB_GLASS, { backgroundColor: palette.surface, borderColor: palette.line }]}
+        style={[styles.tabBar, styles.depthSurface, palette.tabGlass ?? WEB_TAB_GLASS, { backgroundColor: palette.surface, borderColor: palette.line }]}
       >
         {tabBarWidth > 0 && <Animated.View pointerEvents="none" style={[styles.tabSelection, { width: Math.max(0, tabStep - 8), backgroundColor: palette.surfaceStrong, transform: [{ translateX: tabIndicatorX }] }]} />}
         {TABS.map((item) => {
@@ -251,7 +268,7 @@ export default function MainScreen() {
 
     <Modal visible={unlockOpen} transparent animationType="fade" onRequestClose={() => setUnlockOpen(false)}>
       <View style={styles.modalBackdrop}>
-        <View style={[styles.unlockCard, styles.depthSurface, WEB_GLASS, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+        <View style={[styles.unlockCard, styles.depthSurface, palette.sheetGlass ?? WEB_GLASS, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
           <Text style={[styles.label, { color: palette.rose }]}>FOR SOMEONE SPECIAL</Text>
           <Text style={[styles.unlockTitle, { color: palette.text }]}>Enter the code</Text>
           <Animated.View style={{ transform: [{ translateX: codeShakeX }] }}>
@@ -319,7 +336,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
       <Text style={[styles.label, { color: palette.muted }]}>{duty.dateLabel}</Text>
     </View>
 
-    <View style={[styles.heroCard, styles.depthSurface, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+    <View style={[styles.heroCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
       <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.heroRoute, { color: palette.text }]}>{routeChain(duty)}</Text>
       <View style={[styles.heroMetaRow, countdown ? styles.heroMetaRowTall : undefined]}>
         <Text numberOfLines={1} style={[styles.heroFlight, { color: palette.muted }]}>{duty.sectors.map((sector) => sector.flightNumber).join(' · ')}</Text>
@@ -400,11 +417,11 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
     </SwipeSurface>}
     {error && <Text style={[styles.error, { color: palette.rose }]}>{error}</Text>}
 
-    {!roster ? <View style={[styles.emptyCard, styles.depthSurface, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster PDF to begin.</Text></View> : <View style={[styles.innerWindow, styles.depthSurface, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+    {!roster ? <View style={[styles.emptyCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster PDF to begin.</Text></View> : <View style={[styles.innerWindow, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface, borderColor: palette.line }]}>
       <FlatList data={flights} keyExtractor={({ sector }) => sector.id} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}
         renderItem={({ item: { duty, sector } }) => {
           const dateMeta = rosterDateMeta(duty);
-          return <Pressable onPress={() => onSelect(sector.id)} style={[styles.rosterCard, { backgroundColor: selectedSector?.id === sector.id ? palette.accentSoft : palette.surfaceStrong, borderColor: palette.line }]}>
+          return <Pressable onPress={() => onSelect(sector.id)} style={[styles.rosterCard, palette.cardGlass, { backgroundColor: selectedSector?.id === sector.id ? palette.accentSoft : palette.surfaceStrong, borderColor: palette.line }]}>
             <View style={styles.flightCardTop}><Text style={[styles.label, { color: dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}</Text><Text style={[styles.flightNumber, { color: palette.muted }]}>{sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text></View>
             <Text style={[styles.rosterRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text>
             <Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime} · Report {duty.reportTime}</Text>
@@ -417,7 +434,7 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
 }
 
 function MoneyScreen({ roster, palette }: { roster?: ParsedAirAstanaRoster; palette: Palette }) {
-  return <View style={styles.screen}><Text style={[styles.sectionTitle, { color: palette.text }]}>Money</Text>{roster ? <SalaryCard roster={roster} palette={palette} /> : <View style={[styles.emptyCard, styles.depthSurface, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster first.</Text></View>}</View>;
+  return <View style={styles.screen}><Text style={[styles.sectionTitle, { color: palette.text }]}>Money</Text>{roster ? <SalaryCard roster={roster} palette={palette} /> : <View style={[styles.emptyCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster first.</Text></View>}</View>;
 }
 
 function MoreScreen({ rosters, profile, palette, onDeleteRoster, onProfileChange, onErase, onSalarySettings }: { rosters: ParsedAirAstanaRoster[]; profile: CrewProfile; palette: Palette; onDeleteRoster: (periodStart: string) => void; onProfileChange: (contractRank: string) => void; onErase: () => void; onSalarySettings: () => void }) {
@@ -439,12 +456,12 @@ function MoreScreen({ rosters, profile, palette, onDeleteRoster, onProfileChange
 
   return <View style={styles.screen}>
     <Text style={[styles.sectionTitle, { color: palette.text }]}>More</Text>
-    <Pressable onPress={() => { setRankDraft(profile.contractRank); setProfileOpen(true); }} style={[styles.settingsCard, styles.depthSurface, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]} accessibilityRole="button" accessibilityLabel="Edit profile position">
+    <Pressable onPress={() => { setRankDraft(profile.contractRank); setProfileOpen(true); }} style={[styles.settingsCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]} accessibilityRole="button" accessibilityLabel="Edit profile position">
       <View style={styles.grow}><Text style={[styles.cardTitle, { color: palette.text }]}>Profile</Text><Text style={[styles.meta, { color: palette.muted }]}>Position / rank · {profile.contractRank}</Text><Text style={[styles.meta, { color: palette.muted }]}>Display profile only · does not change pay rules</Text></View><Text style={[styles.chevron, { color: palette.accent }]}>›</Text>
     </Pressable>
-    <Pressable onPress={onSalarySettings} style={[styles.settingsCard, styles.depthSurface, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}><View style={styles.grow}><Text style={[styles.cardTitle, { color: palette.text }]}>Salary settings</Text><Text style={[styles.meta, { color: palette.muted }]}>Optional customization for another crew member</Text></View><Text style={[styles.chevron, { color: palette.accent }]}>›</Text></Pressable>
+    <Pressable onPress={onSalarySettings} style={[styles.settingsCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}><View style={styles.grow}><Text style={[styles.cardTitle, { color: palette.text }]}>Salary settings</Text><Text style={[styles.meta, { color: palette.muted }]}>Optional customization for another crew member</Text></View><Text style={[styles.chevron, { color: palette.accent }]}>›</Text></Pressable>
 
-    <View style={[styles.libraryCard, styles.depthSurface, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+    <View style={[styles.libraryCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
       <Text style={[styles.cardTitle, { color: palette.text }]}>Imported rosters</Text>
       {rosters.length ? <FlatList
         data={rosters}
@@ -465,7 +482,7 @@ function MoreScreen({ rosters, profile, palette, onDeleteRoster, onProfileChange
 
     <Modal visible={profileOpen} transparent animationType="fade" onRequestClose={() => setProfileOpen(false)}>
       <View style={styles.modalBackdrop}>
-        <View style={[styles.confirmCard, styles.depthSurface, WEB_GLASS, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+        <View style={[styles.confirmCard, styles.depthSurface, palette.sheetGlass ?? WEB_GLASS, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
           <Text style={[styles.label, { color: palette.muted }]}>PROFILE</Text>
           <Text style={[styles.confirmTitle, { color: palette.text }]}>Position / rank</Text>
           <Text style={[styles.meta, { color: palette.muted }]}>This label is stored on this device and shown in your profile. It does not alter salary calculations.</Text>
@@ -480,7 +497,7 @@ function MoreScreen({ rosters, profile, palette, onDeleteRoster, onProfileChange
 
     <Modal visible={Boolean(deleteCandidate)} transparent animationType="fade" onRequestClose={() => setDeleteCandidate(undefined)}>
       <View style={styles.modalBackdrop}>
-        <View style={[styles.confirmCard, styles.depthSurface, WEB_GLASS, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+        <View style={[styles.confirmCard, styles.depthSurface, palette.sheetGlass ?? WEB_GLASS, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
           <Text style={[styles.label, { color: palette.rose }]}>DELETE ROSTER</Text>
           <Text style={[styles.confirmTitle, { color: palette.text }]}>{deleteCandidate ? rosterMonthLabel(deleteCandidate) : ''}</Text>
           <Text style={[styles.meta, { color: palette.muted }]}>Remove this imported roster and its parsed crew data from this device? The original PDF file is not stored by KhaVair.</Text>
@@ -504,7 +521,7 @@ function FlightDetail({ sector, dateLabel, palette, onClose, onPrevious, onNext 
     handleColor={palette.line}
     backdropOpacity={0.42}
     scrollAtTop={scrollAtTop}
-    style={[styles.flightSheet, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
+    style={[styles.flightSheet, palette.sheetGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
   >
     <SwipeSurface style={styles.flightSheetContent} onSwipeLeft={onNext} onSwipeRight={onPrevious} threshold={44}>
       <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sector.flightNumber}{sector.deadhead ? ' · DHC' : ''}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sector.departure} → {sector.arrival}</Text><Text style={[styles.meta, { color: palette.muted }]}>{sector.departureTime} – {sector.arrivalTime}</Text></View></View>
@@ -579,8 +596,8 @@ function rosterDateMeta(duty: Duty): { label: string; weekend: boolean } {
 function routeChain(duty: Duty): string { return [duty.sectors[0]?.departure, ...duty.sectors.map((sector) => sector.arrival)].filter(Boolean).join(' → '); }
 function TimeCell({ label, value, palette }: { label: string; value: string; palette: Palette }) { return <View style={styles.timeCell}><Text numberOfLines={1} style={[styles.timeLabel, { color: palette.muted }]}>{label}</Text><Text style={[styles.timeValue, { color: palette.text }]}>{value}</Text></View>; }
 function PrimaryButton({ title, onPress, loading, palette }: { title: string; onPress: () => void; loading: boolean; palette: Palette }) { return <Pressable onPress={onPress} disabled={loading} style={[styles.primaryButton, { backgroundColor: palette.accent }]}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionText}>{title}</Text>}</Pressable>; }
-function Summary({ title, value, detail, palette }: { title: string; value: string; detail: string; palette: Palette }) { return <View style={[styles.summary, styles.depthSurface, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.label, { color: palette.muted }]}>{title}</Text><Text style={[styles.summaryValue, { color: palette.text }]}>{value}</Text><Text style={[styles.meta, { color: palette.muted }]}>{detail}</Text></View>; }
-function InfoCard({ title, children, palette }: { title: string; children: React.ReactNode; palette: Palette }) { return <View style={[styles.infoCard, styles.depthSurface, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}><Text style={[styles.cardTitle, { color: palette.text }]}>{title}</Text>{children}</View>; }
+function Summary({ title, value, detail, palette }: { title: string; value: string; detail: string; palette: Palette }) { return <View style={[styles.summary, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.label, { color: palette.muted }]}>{title}</Text><Text style={[styles.summaryValue, { color: palette.text }]}>{value}</Text><Text style={[styles.meta, { color: palette.muted }]}>{detail}</Text></View>; }
+function InfoCard({ title, children, palette }: { title: string; children: React.ReactNode; palette: Palette }) { return <View style={[styles.infoCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}><Text style={[styles.cardTitle, { color: palette.text }]}>{title}</Text>{children}</View>; }
 function operatingCount(roster: ParsedAirAstanaRoster) { return roster.sectors.filter((sector) => !sector.deadhead).length; }
 
 const styles = StyleSheet.create({

@@ -12,7 +12,7 @@ import { loadStoredRosters } from '@/src/storage/rosterStorage';
 import { loadLovedMode } from '@/src/storage/lovedModeStorage';
 import { IOSSheet } from './IOSOverlay';
 
-type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua', string>;
+type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'line'|'accent'|'accentSoft'|'rose'|'aqua', string> & { sheetGlass?: any };
 
 export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster; palette: Palette }) {
   const monthKey = roster.period.start.slice(0, 7);
@@ -111,7 +111,7 @@ export function SalaryCard({ roster, palette }: { roster: ParsedAirAstanaRoster;
       onClose={() => setOpen(false)}
       handleColor={palette.line}
       scrollAtTop={sheetScrollAtTop}
-      style={[styles.sheet, { backgroundColor: palette.background, borderColor: palette.line }]}
+      style={[styles.sheet, palette.sheetGlass, { backgroundColor: palette.background, borderColor: palette.line }]}
     >
       <>
         <View style={styles.sheetHeader}>
