@@ -358,9 +358,9 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
       <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.heroRoute, { color: palette.text }]}>{routeChain(duty)}</Text>
       <View style={[styles.heroMetaRow, countdown ? styles.heroMetaRowTall : undefined]}>
         <Text numberOfLines={1} style={[styles.heroFlight, { color: palette.muted }]}>{duty.sectors.map((sector) => sector.flightNumber).join(' · ')}</Text>
-        {countdown && <View style={[styles.countdownPill, { backgroundColor: palette.accentSoft }]}>
-          <Text style={[styles.countdown, { color: palette.accent }]}>{countdown}</Text>
-          <Text style={[styles.countdownLabel, { color: palette.accent }]}>{isUpcoming ? 'TO REPORT' : 'ON DUTY'}</Text>
+        {countdown && <View style={[styles.countdownPill, { backgroundColor: palette.accentSoft, borderColor: palette.line }]}>
+          <Text style={[styles.countdown, { color: palette.text }]}>{countdown}</Text>
+          <Text style={[styles.countdownLabel, { color: palette.muted }]}>{isUpcoming ? 'TO REPORT' : 'ON DUTY'}</Text>
         </View>}
       </View>
 
@@ -662,7 +662,7 @@ const styles = StyleSheet.create({
   heroCard: { borderWidth: 1, borderRadius: 26, padding: 18 },
   heroRoute: { fontSize: 36, lineHeight: 42, fontWeight: '700', letterSpacing: -1 },
   heroMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }, heroMetaRowTall: { minHeight: 44 }, heroFlight: { flex: 1, fontSize: 13, fontWeight: '600' },
-  countdownPill: { borderRadius: 15, paddingHorizontal: 12, paddingVertical: 6, alignItems: 'center' }, countdown: { fontSize: 18, fontWeight: '800', fontVariant: ['tabular-nums'] }, countdownLabel: { fontSize: 10, fontWeight: '700', letterSpacing: .7, marginTop: 1 },
+  countdownPill: { borderWidth: 1, borderRadius: 15, paddingHorizontal: 12, paddingVertical: 6, alignItems: 'center' }, countdown: { fontSize: 18, fontWeight: '800', fontVariant: ['tabular-nums'] }, countdownLabel: { fontSize: 10, fontWeight: '700', letterSpacing: .7, marginTop: 1 },
   timeDivider: { height: StyleSheet.hairlineWidth, marginVertical: 14 },
   timeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 }, timeCell: { flex: 1, minWidth: 0 },
   timeLabel: { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: .3 }, timeValue: { fontSize: 22, lineHeight: 27, fontWeight: '700', marginTop: 3, fontVariant: ['tabular-nums'] },
