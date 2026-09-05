@@ -11,7 +11,7 @@ const PRODUCTION_CSP = [
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline' blob:",
-  "connect-src 'self' https://nationalbank.kz https://www.gov.kz",
+  "connect-src 'self' https://nationalbank.kz https://www.gov.kz https://api.open-meteo.com",
   "worker-src 'self' blob:",
   "media-src 'none'",
 ].join('; ');
@@ -63,7 +63,7 @@ const REGISTER_SW = `
       const UPDATE_TITLE_SPECIAL = 'Lyubimkina there is a new version available for you';
       const UPDATE_TITLE_NORMAL = 'A new version of KhaVair is available.';
       // Keep this short and update it with each published version.
-      const UPDATE_NOTICE = 'New: tap the current flight card on Home to see the crew list. Swipe up to close the app, then open it again.';
+      const UPDATE_NOTICE = 'New: the roster opens on today automatically, and arrival-airport weather now shows on Home and in flight details.';
 
       const specialModeActive = () => {
         try {
