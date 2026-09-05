@@ -5,6 +5,7 @@ import { SalaryCard } from './SalaryCard';
 import { SalarySettingsSheet } from './SalarySettingsSheet';
 import { SwipeSurface, type SwipeSurfaceHandle } from './SwipeSurface';
 import { IOSSheet } from './IOSOverlay';
+import { softHaptic } from './haptics';
 import { exportRosterCalendar } from '@/src/domain/calendar';
 import type { Duty, GroundEvent, Sector } from '@/src/domain/types';
 import { verifyLovedModeCode } from '@/src/domain/lovedMode';
@@ -326,6 +327,8 @@ export default function MainScreen() {
 
 function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing }: { allDuties: RosterDuty[]; fallbackRoster?: ParsedAirAstanaRoster; rosters: ParsedAirAstanaRoster[]; palette: Palette; onImport: () => void; importing: boolean }) {
   const now = useNow();
+  const [crewOpen, setCrewOpen] = useState(false);
+  const heroPressScale = useRef(new Animated.Value(1)).current;
   const timeline = useMemo(() => timedDuties(allDuties), [allDuties]);
   const focus = useMemo(() => pickFocusDuty(timeline, now), [timeline, now]);
   const roster = focus?.roster ?? fallbackRoster;
@@ -346,6 +349,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
   const countdown = reportMs === undefined ? undefined : isUpcoming ? formatCountdown(reportMs - now) : isActive ? formatCountdown(now - reportMs) : undefined;
   const spanMinutes = reportMs !== undefined && releaseMs !== undefined ? Math.round((releaseMs - reportMs) / 60000) : undefined;
   const dutyMinutes = spanMinutes !== undefined && spanMinutes > 0 ? spanMinutes : undefined;
+  const crewCount = duty.sectors.reduce((total, sector) => total + sector.crew.length, 0);
 
   const year = roster.period.start.slice(0, 4);
   const yearRosters = rosters.filter((item) => item.period.start.startsWith(`${year}-`));
@@ -360,28 +364,42 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
       <Text style={[styles.label, { color: palette.muted }]}>{duty.dateLabel}</Text>
     </View>
 
-    <View style={[styles.heroCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
-      <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.heroRoute, { color: palette.text }]}>{routeChain(duty)}</Text>
-      <View style={[styles.heroMetaRow, countdown ? styles.heroMetaRowTall : undefined]}>
-        <Text numberOfLines={1} style={[styles.heroFlight, { color: palette.muted }]}>{duty.sectors.map((sector) => sector.flightNumber).join(' · ')}</Text>
-        {countdown && <View style={[styles.countdownPill, { backgroundColor: palette.accentSoft, borderColor: palette.line }]}>
-          <Text style={[styles.countdown, { color: palette.text }]}>{countdown}</Text>
-          <Text style={[styles.countdownLabel, { color: palette.muted }]}>{isUpcoming ? 'TO REPORT' : 'ON DUTY'}</Text>
-        </View>}
-      </View>
+    <Animated.View style={{ transform: [{ scale: heroPressScale }] }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`View crew for ${routeChain(duty)}`}
+        onPressIn={() => Animated.spring(heroPressScale, { toValue: 0.986, stiffness: 560, damping: 34, mass: 0.42, useNativeDriver: true, isInteraction: false }).start()}
+        onPressOut={() => Animated.spring(heroPressScale, { toValue: 1, stiffness: 420, damping: 25, mass: 0.52, useNativeDriver: true, isInteraction: false }).start()}
+        onPress={() => { softHaptic(); setCrewOpen(true); }}
+        style={[styles.heroCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
+      >
+        <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.heroRoute, { color: palette.text }]}>{routeChain(duty)}</Text>
+        <View style={[styles.heroMetaRow, countdown ? styles.heroMetaRowTall : undefined]}>
+          <Text numberOfLines={1} style={[styles.heroFlight, { color: palette.muted }]}>{duty.sectors.map((sector) => sector.flightNumber).join(' · ')}</Text>
+          {countdown && <View style={[styles.countdownPill, { backgroundColor: palette.accentSoft, borderColor: palette.line }]}>
+            <Text style={[styles.countdown, { color: palette.text }]}>{countdown}</Text>
+            <Text style={[styles.countdownLabel, { color: palette.muted }]}>{isUpcoming ? 'TO REPORT' : 'ON DUTY'}</Text>
+          </View>}
+        </View>
 
-      <View style={[styles.timeDivider, { backgroundColor: palette.line }]} />
-      <View style={styles.timeRow}>
-        <TimeCell label="REPORT" value={duty.reportTime} palette={palette} />
-        <TimeCell label={`DEP · ${first.departure}`} value={first.departureTime} palette={palette} />
-        <TimeCell label={`ARR · ${last.arrival}`} value={last.arrivalTime} palette={palette} />
-        <TimeCell label="RELEASE" value={duty.releaseTime} palette={palette} />
-      </View>
+        <View style={[styles.timeDivider, { backgroundColor: palette.line }]} />
+        <View style={styles.timeRow}>
+          <TimeCell label="REPORT" value={duty.reportTime} palette={palette} />
+          <TimeCell label={`DEP · ${first.departure}`} value={first.departureTime} palette={palette} />
+          <TimeCell label={`ARR · ${last.arrival}`} value={last.arrivalTime} palette={palette} />
+          <TimeCell label="RELEASE" value={duty.releaseTime} palette={palette} />
+        </View>
 
-      <Text style={[styles.heroFoot, { color: palette.muted }]}>
-        {dutyMinutes !== undefined ? `Duty ${formatMinutes(dutyMinutes)} · ` : ''}{duty.sectors.length} sector{duty.sectors.length === 1 ? '' : 's'}
-      </Text>
-    </View>
+        <View style={styles.heroFootRow}>
+          <Text style={[styles.heroFoot, { color: palette.muted }]}>
+            {dutyMinutes !== undefined ? `Duty ${formatMinutes(dutyMinutes)} · ` : ''}{duty.sectors.length} sector{duty.sectors.length === 1 ? '' : 's'}
+          </Text>
+          <View style={[styles.heroCrewPill, { backgroundColor: palette.accentSoft }]}>
+            <Text style={[styles.heroCrewText, { color: palette.accent }]}>{crewCount ? `CREW · ${crewCount}` : 'VIEW CREW'}  ›</Text>
+          </View>
+        </View>
+      </Pressable>
+    </Animated.View>
 
     <Text style={[styles.label, { color: palette.muted }]}>{rosterMonthLabel(roster)}</Text>
     <View style={styles.summaryRow}>
@@ -404,6 +422,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
           </View>
         </View>} />
     </View>}
+    {crewOpen && <FlightDetail sectors={duty.sectors} dateLabel={duty.dateLabel} palette={palette} onClose={() => setCrewOpen(false)} />}
   </View>;
 }
 
@@ -677,7 +696,7 @@ const styles = StyleSheet.create({
   timeDivider: { height: StyleSheet.hairlineWidth, marginVertical: 14 },
   timeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 }, timeCell: { flex: 1, minWidth: 0 },
   timeLabel: { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: .3 }, timeValue: { fontSize: 22, lineHeight: 27, fontWeight: '700', marginTop: 3, fontVariant: ['tabular-nums'] },
-  heroFoot: { fontSize: 13, fontWeight: '600', marginTop: 14 },
+  heroFootRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 14 }, heroFoot: { flex: 1, fontSize: 13, fontWeight: '600' }, heroCrewPill: { borderRadius: 12, paddingHorizontal: 9, paddingVertical: 6 }, heroCrewText: { fontSize: 10, fontWeight: '800', letterSpacing: .55 },
   summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14 }, summaryValue: { fontSize: 28, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] },
   upNext: { flex: 1, minHeight: 0, gap: 2 }, upNextList: { flex: 1 }, upNextRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
   upNextDate: { fontSize: 12, fontWeight: '700', letterSpacing: .4, width: 54 }, upNextRoute: { flex: 1, fontSize: 15, fontWeight: '600' }, upNextTimeBlock: { minWidth: 72, alignItems: 'flex-end' }, upNextTimeLabel: { fontSize: 8, lineHeight: 10, fontWeight: '700', letterSpacing: .45, marginBottom: 1 }, upNextTime: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
