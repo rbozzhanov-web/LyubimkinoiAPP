@@ -3,7 +3,7 @@ import { ActivityIndicator, Animated, FlatList, Modal, Platform, Pressable, Styl
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SalaryCard } from './SalaryCard';
 import { SalarySettingsSheet } from './SalarySettingsSheet';
-import { SwipeSurface } from './SwipeSurface';
+import { SwipeSurface, type SwipeSurfaceHandle } from './SwipeSurface';
 import { IOSSheet } from './IOSOverlay';
 import { exportRosterCalendar } from '@/src/domain/calendar';
 import type { Duty, GroundEvent, Sector } from '@/src/domain/types';
@@ -78,6 +78,7 @@ export default function MainScreen() {
   const [tabBarWidth, setTabBarWidth] = useState(0);
   const tabSelection = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
+  const tabSwipeRef = useRef<SwipeSurfaceHandle>(null);
 
   useEffect(() => {
     setLovedMode(loadLovedMode());
@@ -186,6 +187,12 @@ export default function MainScreen() {
     setSelectedFlight(undefined);
     setTab(next);
   };
+  const goToTab = (target: Tab) => {
+    if (target === tab) return;
+    const direction = TABS.indexOf(target) > TABS.indexOf(tab) ? -1 : 1;
+    setSelectedFlight(undefined);
+    tabSwipeRef.current?.play(direction, () => setTab(target));
+  };
 
   const requestLovedMode = () => {
     if (lovedMode) { clearLovedMode(); setLovedMode(false); return; }
@@ -258,7 +265,7 @@ export default function MainScreen() {
         </View>
       </View>
 
-      <SwipeSurface style={styles.viewport} onSwipeLeft={tab === 'More' ? undefined : () => changeTab(1)} onSwipeRight={tab === 'Home' ? undefined : () => changeTab(-1)}>
+      <SwipeSurface ref={tabSwipeRef} style={styles.viewport} onSwipeLeft={tab === 'More' ? undefined : () => changeTab(1)} onSwipeRight={tab === 'Home' ? undefined : () => changeTab(-1)}>
         {tab === 'Home' && <Home allDuties={allDuties} fallbackRoster={roster} rosters={rosters} palette={palette} onImport={importRoster} importing={importing} />}
         {tab === 'Roster' && <RosterScreen roster={roster} rosters={rosters} duties={duties} selectedSector={selectedSector} palette={palette} profile={crewProfile} importing={importing} error={importError} onImport={importRoster} onSelect={setSelectedFlight} onMonth={changeMonth} />}
         {tab === 'Money' && <MoneyScreen key={`${roster?.period.start ?? 'none'}-${payRevision}`} roster={roster} palette={palette} />}
@@ -275,7 +282,7 @@ export default function MainScreen() {
         {tabBarWidth > 0 && <Animated.View pointerEvents="none" style={[styles.tabSelection, { width: Math.max(0, tabStep - 8), backgroundColor: palette.surfaceStrong, transform: [{ translateX: tabIndicatorX }] }]} />}
         {TABS.map((item) => {
           const active = item === tab;
-          return <Pressable key={item} onPress={() => { setSelectedFlight(undefined); setTab(item); }} style={styles.tabItem} accessibilityRole="tab" accessibilityState={{ selected: active }}>
+          return <Pressable key={item} onPress={() => goToTab(item)} style={styles.tabItem} accessibilityRole="tab" accessibilityState={{ selected: active }}>
             <View style={styles.tabIconWrap}><Text style={[styles.tabIcon, { color: active ? palette.accent : palette.muted, fontSize: TAB_ICONS[item].size, lineHeight: TAB_ICONS[item].size + 3, marginTop: TAB_ICONS[item].nudge, fontWeight: TAB_ICONS[item].weight }]}>{TAB_ICONS[item].glyph}</Text></View>
             <Text style={[styles.tabText, { color: active ? palette.text : palette.muted }]}>{item}</Text>
           </Pressable>;
@@ -417,6 +424,7 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
     }));
     return [...flightRows, ...groundRows].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
   }, [flights, groundEvents]);
+  const monthSwipeRef = useRef<SwipeSurfaceHandle>(null);
   useEffect(() => setCalendarState('idle'), [roster?.period.start]);
 
   const exportCalendar = async () => {
@@ -428,6 +436,10 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
       setCalendarState(cancelled ? 'idle' : 'error');
     }
   };
+  const goToMonth = (direction: -1 | 1) => {
+    if ((direction === -1 && index <= 0) || (direction === 1 && index >= rosters.length - 1)) return;
+    monthSwipeRef.current?.play(direction === 1 ? -1 : 1, () => onMonth(direction));
+  };
 
   return <View style={styles.screen}>
     <View style={styles.titleRow}>
@@ -438,10 +450,10 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
       </View>
     </View>
 
-    {roster && rosters.length > 1 && <SwipeSurface style={styles.monthNav} onSwipeRight={index > 0 ? () => onMonth(-1) : undefined} onSwipeLeft={index < rosters.length - 1 ? () => onMonth(1) : undefined} threshold={38}>
-      <Pressable disabled={index <= 0} onPress={() => onMonth(-1)}><Text style={[styles.monthNavText, { color: index <= 0 ? palette.line : palette.text }]}>‹ Previous</Text></Pressable>
+    {roster && rosters.length > 1 && <SwipeSurface ref={monthSwipeRef} style={styles.monthNav} onSwipeRight={index > 0 ? () => onMonth(-1) : undefined} onSwipeLeft={index < rosters.length - 1 ? () => onMonth(1) : undefined} threshold={38}>
+      <Pressable disabled={index <= 0} onPress={() => goToMonth(-1)}><Text style={[styles.monthNavText, { color: index <= 0 ? palette.line : palette.text }]}>‹ Previous</Text></Pressable>
       <Text style={[styles.meta, { color: palette.muted }]}>{index + 1} / {rosters.length}</Text>
-      <Pressable disabled={index >= rosters.length - 1} onPress={() => onMonth(1)}><Text style={[styles.monthNavText, { color: index >= rosters.length - 1 ? palette.line : palette.text }]}>Next ›</Text></Pressable>
+      <Pressable disabled={index >= rosters.length - 1} onPress={() => goToMonth(1)}><Text style={[styles.monthNavText, { color: index >= rosters.length - 1 ? palette.line : palette.text }]}>Next ›</Text></Pressable>
     </SwipeSurface>}
     {error && <Text style={[styles.error, { color: palette.rose }]}>{error}</Text>}
 
