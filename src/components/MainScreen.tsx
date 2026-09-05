@@ -349,7 +349,6 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
   const countdown = reportMs === undefined ? undefined : isUpcoming ? formatCountdown(reportMs - now) : isActive ? formatCountdown(now - reportMs) : undefined;
   const spanMinutes = reportMs !== undefined && releaseMs !== undefined ? Math.round((releaseMs - reportMs) / 60000) : undefined;
   const dutyMinutes = spanMinutes !== undefined && spanMinutes > 0 ? spanMinutes : undefined;
-  const crewCount = duty.sectors.reduce((total, sector) => total + sector.crew.length, 0);
 
   const year = roster.period.start.slice(0, 4);
   const yearRosters = rosters.filter((item) => item.period.start.startsWith(`${year}-`));
@@ -390,14 +389,9 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
           <TimeCell label="RELEASE" value={duty.releaseTime} palette={palette} />
         </View>
 
-        <View style={styles.heroFootRow}>
-          <Text style={[styles.heroFoot, { color: palette.muted }]}>
-            {dutyMinutes !== undefined ? `Duty ${formatMinutes(dutyMinutes)} · ` : ''}{duty.sectors.length} sector{duty.sectors.length === 1 ? '' : 's'}
-          </Text>
-          <View style={[styles.heroCrewPill, { backgroundColor: palette.accentSoft }]}>
-            <Text style={[styles.heroCrewText, { color: palette.accent }]}>{crewCount ? `CREW · ${crewCount}` : 'VIEW CREW'}  ›</Text>
-          </View>
-        </View>
+        <Text style={[styles.heroFoot, { color: palette.muted }]}>
+          {dutyMinutes !== undefined ? `Duty ${formatMinutes(dutyMinutes)} · ` : ''}{duty.sectors.length} sector{duty.sectors.length === 1 ? '' : 's'}
+        </Text>
       </Pressable>
     </Animated.View>
 
@@ -696,7 +690,7 @@ const styles = StyleSheet.create({
   timeDivider: { height: StyleSheet.hairlineWidth, marginVertical: 14 },
   timeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 }, timeCell: { flex: 1, minWidth: 0 },
   timeLabel: { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: .3 }, timeValue: { fontSize: 22, lineHeight: 27, fontWeight: '700', marginTop: 3, fontVariant: ['tabular-nums'] },
-  heroFootRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 14 }, heroFoot: { flex: 1, fontSize: 13, fontWeight: '600' }, heroCrewPill: { borderRadius: 12, paddingHorizontal: 9, paddingVertical: 6 }, heroCrewText: { fontSize: 10, fontWeight: '800', letterSpacing: .55 },
+  heroFoot: { fontSize: 13, fontWeight: '600', marginTop: 14 },
   summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14 }, summaryValue: { fontSize: 28, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] },
   upNext: { flex: 1, minHeight: 0, gap: 2 }, upNextList: { flex: 1 }, upNextRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
   upNextDate: { fontSize: 12, fontWeight: '700', letterSpacing: .4, width: 54 }, upNextRoute: { flex: 1, fontSize: 15, fontWeight: '600' }, upNextTimeBlock: { minWidth: 72, alignItems: 'flex-end' }, upNextTimeLabel: { fontSize: 8, lineHeight: 10, fontWeight: '700', letterSpacing: .45, marginBottom: 1 }, upNextTime: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
