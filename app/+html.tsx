@@ -58,7 +58,10 @@ const REGISTER_SW = `
     window.addEventListener('load', async () => {
       const REVISION_KEY = 'khavair.sw-revision.v1';
       let updateNotified = false;
-      const UPDATE_TITLE = 'Lyubimkina there is a new version available for you';
+      // The personal title is Special Mode only -- it must never show before the mode is
+      // unlocked, since Special Mode's whole point is staying invisible until then.
+      const UPDATE_TITLE_SPECIAL = 'Lyubimkina there is a new version available for you';
+      const UPDATE_TITLE_NORMAL = 'A new version of KhaVair is available.';
       // Keep this short and update it with each published version.
       const UPDATE_NOTICE = 'Roster update: OFF/DOFF colours and short relays. Swipe up to close the app, then open it again.';
 
@@ -155,12 +158,12 @@ const REGISTER_SW = `
               // a genuinely first-ever install establishes the baseline silently.
               if (navigator.serviceWorker.controller) {
                 updateNotified = true;
-                showUpdateNotice(UPDATE_TITLE, UPDATE_NOTICE);
+                showUpdateNotice(specialModeActive() ? UPDATE_TITLE_SPECIAL : UPDATE_TITLE_NORMAL, UPDATE_NOTICE);
               }
               storeRevision(publishedRevision);
             } else if (storedRevision !== publishedRevision) {
               updateNotified = true;
-              showUpdateNotice(UPDATE_TITLE, UPDATE_NOTICE);
+              showUpdateNotice(specialModeActive() ? UPDATE_TITLE_SPECIAL : UPDATE_TITLE_NORMAL, UPDATE_NOTICE);
               storeRevision(publishedRevision);
             }
 

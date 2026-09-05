@@ -10,7 +10,7 @@ import type { Duty, GroundEvent, Sector } from '@/src/domain/types';
 import { verifyLovedModeCode } from '@/src/domain/lovedMode';
 import { DEFAULT_PROFILE, type CrewProfile } from '@/src/domain/profile';
 import { sumReportedBlockMinutes, sumReportedNightMinutes } from '@/src/domain/layovers';
-import { formatMinutes, rosterMonthLabel, rosterToDuties, rosterToFlightCardGroups, rosterToGroundEvents, sectorRoute } from '@/src/domain/rosterView';
+import { formatMinutes, rosterMonthLabel, rosterToDuties, rosterToFlightCardGroups, rosterToGroundEvents, sectorRoute, type FlightCardGroup } from '@/src/domain/rosterView';
 import { stationLocalDateTimeMs } from '@/src/domain/stationTime';
 import { pickAndParseRoster } from '@/src/import/pickRoster';
 import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
@@ -33,8 +33,7 @@ type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'lin
   tabGlass?: any;
   sheetGlass?: any;
 };
-type FlightCardRow = { id: string; duty: Duty; sectors: Sector[] };
-type RosterRow = { kind: 'flight'; key: string; sortKey: string; card: FlightCardRow } | { kind: 'ground'; key: string; sortKey: string; event: GroundEvent };
+type RosterRow = { kind: 'flight'; key: string; sortKey: string; card: FlightCardGroup } | { kind: 'ground'; key: string; sortKey: string; event: GroundEvent };
 type RosterDuty = { roster: ParsedAirAstanaRoster; duty: Duty };
 type FocusDuty = RosterDuty & { reportMs: number; releaseMs: number };
 const WEB_GLASS = Platform.OS === 'web'
@@ -404,7 +403,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
 function RosterScreen({ roster, rosters, duties, selectedSector, palette, profile, importing, error, onImport, onSelect, onMonth }: { roster?: ParsedAirAstanaRoster; rosters: ParsedAirAstanaRoster[]; duties: Duty[]; selectedSector?: Sector; palette: Palette; profile: CrewProfile; importing: boolean; error?: string; onImport: () => void; onSelect: (id?: string) => void; onMonth: (direction: -1 | 1) => void }) {
   const [calendarState, setCalendarState] = useState<'idle'|'working'|'done'|'error'>('idle');
   const index = roster ? rosters.findIndex((item) => item.period.start === roster.period.start) : -1;
-  const flights = useMemo<FlightCardRow[]>(() => rosterToFlightCardGroups(duties), [duties]);
+  const flights = useMemo<FlightCardGroup[]>(() => rosterToFlightCardGroups(duties), [duties]);
   const selectedIndex = selectedSector ? flights.findIndex((card) => card.sectors.some((sector) => sector.id === selectedSector.id)) : -1;
   const selectedRow = selectedIndex >= 0 ? flights[selectedIndex] : undefined;
   const groundEvents = useMemo(() => roster ? rosterToGroundEvents(roster) : [], [roster]);

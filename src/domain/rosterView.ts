@@ -5,11 +5,6 @@ import type { RosterSector } from '@/src/import/duties';
 
 const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 
-// Rest/available codes that take a crew member off flying without being a payroll absence
-// (see the PAYROLL_ABSENCE_CODES comment in src/import/duties.ts for the payslip-verified split).
-const DAY_OFF_CODES = new Set(['OFF', 'DOFF', 'ROFF', 'BOFF', 'AVLB', 'HOMS']);
-export function isDayOffCode(code: string): boolean { return DAY_OFF_CODES.has(code); }
-
 export function rosterToGroundEvents(roster: ParsedAirAstanaRoster): GroundEvent[] {
   return (roster.groundDuties ?? []).map((item, index) => ({
     id: `ground-${item.date}-${item.code}-${index}`,

@@ -8,7 +8,7 @@ import { clearLovedMode, loadLovedMode, saveLovedMode } from '../src/storage/lov
 import { swipeAxis } from '../src/domain/gesture';
 import type { ExtractedPage, TextItem } from '../src/import/types';
 import { readRoster } from '../src/import/duties';
-import { isDayOffCode, rosterToFlightCardGroups, sectorRoute } from '../src/domain/rosterView';
+import { rosterToFlightCardGroups, sectorRoute } from '../src/domain/rosterView';
 
 const MRP_2026 = 4325;
 
@@ -133,8 +133,6 @@ equal(groundReading.groundDuties[0]?.code, 'OFF', 'raw ground-duty code is prese
 equal(groundReading.groundDuties[0]?.date, '2026-07-04', 'ground-duty day keeps its resolved calendar date');
 equal(groundReading.absences.length, 1, 'only the payroll-relevant code becomes an absence');
 equal(groundReading.absences[0]?.code, 'SICK', 'SICK is both a ground duty and a payroll absence');
-equal(isDayOffCode('OFF'), true, 'OFF is a day-off code');
-equal(isDayOffCode('SICK'), false, 'SICK is a payroll absence, not a day-off code');
 
 // The roster list keeps short same-station relays compact, but never drops the
 // underlying sector records needed for their individual times and crew.
