@@ -11,7 +11,7 @@ const PRODUCTION_CSP = [
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline' blob:",
-  "connect-src 'self' https://nationalbank.kz https://www.gov.kz",
+  "connect-src 'self' https://nationalbank.kz https://www.gov.kz https://api.open-meteo.com",
   "worker-src 'self' blob:",
   "media-src 'none'",
 ].join('; ');

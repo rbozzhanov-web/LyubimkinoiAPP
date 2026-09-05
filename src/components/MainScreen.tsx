@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, FlatList, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View, useColorScheme, useWindowDimensions } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, FlatList, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View, useColorScheme, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SalaryCard } from './SalaryCard';
 import { SalarySettingsSheet } from './SalarySettingsSheet';
@@ -20,6 +20,8 @@ import { clearStoredRosters, loadStoredRosters, removeStoredRoster, upsertStored
 import { activateSpecialPayPreset } from '@/src/storage/specialPayPreset';
 import { clearLovedMode, clearSavedTheme, loadLovedMode, loadSavedTheme, saveLovedMode, saveTheme, type SavedTheme } from '@/src/storage/lovedModeStorage';
 import { clearCrewProfile, loadCrewProfile, saveCrewProfile } from '@/src/storage/profileStorage';
+import { useAirportWeather } from '@/src/weather/weatherService';
+import { weatherIcon, windDirectionLabel } from '@/src/weather/weatherCodes';
 
 type Tab = 'Home' | 'Roster' | 'Money' | 'More';
 const TABS: Tab[] = ['Home', 'Roster', 'Money', 'More'];
@@ -53,6 +55,24 @@ const WEB_TAB_GLASS_LOVED = Platform.OS === 'web'
 const WEB_SHEET_GLASS_LOVED = Platform.OS === 'web'
   ? ({ backdropFilter: 'blur(28px) saturate(1.4)', WebkitBackdropFilter: 'blur(28px) saturate(1.4)' } as any)
   : undefined;
+/**
+ * All shadow* props must live in the same style object — react-native-web derives a single
+ * boxShadow per object, so splitting shadowColor into a separate object in the style array
+ * (rather than merging shadow properties key-by-key) makes the later object's missing
+ * offset/radius/opacity silently zero out the shadow instead of merging with the earlier one.
+ */
+const todayGlow = (palette: Palette) => ({
+  shadowColor: palette.accent, shadowOffset: { width: 0, height: 8 }, shadowOpacity: .32, shadowRadius: 20, elevation: 8,
+});
+// Matches styles.listContent (padding:8, gap:7) — used by getItemLayout to compute an
+// authoritative scroll offset before rows are actually measured.
+const LIST_TOP_PADDING = 8;
+const LIST_ROW_GAP = 7;
+const ROW_HEIGHT_ESTIMATE = { flight: 108, ground: 70 } as const;
+function localTodayIso(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
 
 export default function MainScreen() {
   const scheme = useColorScheme();
@@ -392,6 +412,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
         <Text style={[styles.heroFoot, { color: palette.muted }]}>
           {dutyMinutes !== undefined ? `Duty ${formatMinutes(dutyMinutes)} · ` : ''}{duty.sectors.length} sector{duty.sectors.length === 1 ? '' : 's'}
         </Text>
+        <WeatherChip code={last.arrival} palette={palette} />
       </Pressable>
     </Animated.View>
 
@@ -438,6 +459,51 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
     return [...flightRows, ...groundRows].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
   }, [flights, groundEvents]);
   const monthSwipeRef = useRef<SwipeSurfaceHandle>(null);
+  const listRef = useRef<FlatList<RosterRow>>(null);
+  const rowHeights = useRef(new Map<string, number>()).current;
+  const offsetsCache = useRef<{ rows: RosterRow[]; offsets: number[] } | null>(null);
+  const today = localTodayIso();
+  const todayIndex = useMemo(() => {
+    let idx = rows.findIndex((row) => row.sortKey.slice(0, 10) === today);
+    if (idx === -1) idx = rows.findIndex((row) => row.sortKey.slice(0, 10) > today);
+    return idx;
+  }, [rows, today]);
+  // Without this, scrollToIndex/initialScrollIndex have to guess an offset (via
+  // averageItemLength), render near it, measure, and correct — a multi-step process that
+  // reliably lands a few rows short of the target instead of putting it at the top. Caching
+  // each row's real measured height (falling back to a per-kind estimate before it's been
+  // measured) gives FlatList an authoritative offset up front, so it can jump there in one
+  // step, and accuracy only improves as more rows get measured.
+  const heightFor = useCallback((row: RosterRow | undefined) => {
+    if (!row) return ROW_HEIGHT_ESTIMATE.flight;
+    return rowHeights.get(row.key) ?? ROW_HEIGHT_ESTIMATE[row.kind];
+  }, [rowHeights]);
+  // Offsets are cached per `rows` array and only rebuilt (once, O(n)) when a row's height
+  // actually changes — otherwise every one of FlatList's frequent getItemLayout calls would
+  // redo the prefix-sum loop from scratch.
+  const buildOffsets = useCallback(() => {
+    const offsets: number[] = [];
+    let offset = LIST_TOP_PADDING;
+    for (const row of rows) { offsets.push(offset); offset += heightFor(row) + LIST_ROW_GAP; }
+    offsetsCache.current = { rows, offsets };
+    return offsets;
+  }, [rows, heightFor]);
+  const getItemLayout = useCallback((data: ArrayLike<RosterRow> | null | undefined, index: number) => {
+    const cached = offsetsCache.current;
+    const offsets = cached && cached.rows === rows ? cached.offsets : buildOffsets();
+    return { length: heightFor(data?.[index]), offset: offsets[index] ?? 0, index };
+  }, [rows, heightFor, buildOffsets]);
+  const measureRow = useCallback((key: string, height: number) => {
+    if (rowHeights.get(key) === height) return;
+    rowHeights.set(key, height);
+    offsetsCache.current = null;
+  }, [rowHeights]);
+  // Measured heights are keyed by row (not by month), so switching months would otherwise
+  // keep accumulating entries for every row ever seen across the whole session.
+  useEffect(() => {
+    rowHeights.clear();
+    offsetsCache.current = null;
+  }, [roster?.period.start, rowHeights]);
   useEffect(() => setCalendarState('idle'), [roster?.period.start]);
 
   const exportCalendar = async () => {
@@ -471,14 +537,27 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
     {error && <Text style={[styles.error, { color: palette.rose }]}>{error}</Text>}
 
     {!roster ? <View style={[styles.emptyCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster PDF to begin.</Text></View> : <View style={[styles.innerWindow, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-      <FlatList data={rows} keyExtractor={(row) => row.key} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}
+      <FlatList
+        ref={listRef}
+        data={rows}
+        keyExtractor={(row) => row.key}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        initialScrollIndex={todayIndex > 0 ? todayIndex : undefined}
+        getItemLayout={getItemLayout}
+        onScrollToIndexFailed={(info) => {
+          listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+          requestAnimationFrame(() => listRef.current?.scrollToIndex({ index: info.index, animated: false }));
+        }}
         renderItem={({ item: row }) => {
+          const isToday = row.sortKey.slice(0, 10) === today;
+          const onLayout = (event: LayoutChangeEvent) => measureRow(row.key, event.nativeEvent.layout.height);
           if (row.kind === 'ground') {
             const dateMeta = dateMetaFor(row.event.date, row.event.dateLabel);
             const highlight = row.event.code === 'OFF' ? 'aqua' : row.event.code === 'DOFF' ? 'forest' : undefined;
-            return <View style={[styles.rosterCard, palette.cardGlass, { backgroundColor: highlight === 'aqua' ? palette.aquaTint : highlight === 'forest' ? palette.forestTint : palette.surfaceStrong, borderColor: highlight === 'aqua' ? palette.aquaBorder : highlight === 'forest' ? palette.forestBorder : palette.line }]}>
-              <View style={styles.flightCardTop}><Text style={[styles.label, { color: dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}</Text></View>
-              <Text style={[styles.rosterRoute, { color: highlight === 'aqua' ? palette.aqua : highlight === 'forest' ? palette.forest : palette.text }]}>{row.event.code}</Text>
+            return <View onLayout={onLayout} style={[styles.rosterCard, palette.cardGlass, isToday && styles.rosterCardToday, { backgroundColor: isToday ? palette.accentSoft : highlight === 'aqua' ? palette.aquaTint : highlight === 'forest' ? palette.forestTint : palette.surfaceStrong, borderColor: isToday ? palette.accent : highlight === 'aqua' ? palette.aquaBorder : highlight === 'forest' ? palette.forestBorder : palette.line, ...(isToday ? todayGlow(palette) : null) }]}>
+              <View style={styles.flightCardTop}><Text style={[styles.label, { color: isToday ? palette.accent : dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}{isToday ? ' · TODAY' : ''}</Text></View>
+              <Text style={[styles.rosterRoute, { color: isToday ? palette.accent : highlight === 'aqua' ? palette.aqua : highlight === 'forest' ? palette.forest : palette.text }]}>{row.event.code}</Text>
             </View>;
           }
           const { duty, sectors } = row.card;
@@ -486,8 +565,8 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
           const last = sectors.at(-1)!;
           const dateMeta = rosterDateMeta(duty);
           const selected = sectors.some((sector) => sector.id === selectedSector?.id);
-          return <Pressable onPress={() => onSelect(first.id)} style={[styles.rosterCard, palette.cardGlass, { backgroundColor: selected ? palette.accentSoft : palette.surfaceStrong, borderColor: palette.line }]}>
-            <View style={styles.flightCardTop}><Text style={[styles.label, { color: dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}</Text></View>
+          return <Pressable onPress={() => onSelect(first.id)} onLayout={onLayout} style={[styles.rosterCard, palette.cardGlass, isToday && styles.rosterCardToday, { backgroundColor: isToday || selected ? palette.accentSoft : palette.surfaceStrong, borderColor: isToday ? palette.accent : palette.line, ...(isToday ? todayGlow(palette) : null) }]}>
+            <View style={styles.flightCardTop}><Text style={[styles.label, { color: isToday ? palette.accent : dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}{isToday ? ' · TODAY' : ''}</Text></View>
             <Text style={[styles.flightNumbers, { color: palette.muted }]}>{sectors.map((sector) => `${sector.flightNumber}${sector.deadhead ? ' · DHC' : ''}`).join(' · ')}</Text>
             <Text style={[styles.rosterRoute, { color: palette.text }]}>{sectorRoute(sectors)}</Text>
             <Text style={[styles.meta, { color: palette.muted }]}>{first.departureTime} – {last.arrivalTime} · Report {duty.reportTime}</Text>
@@ -543,7 +622,7 @@ function MoreScreen({ rosters, profile, palette, onDeleteRoster, onProfileChange
       /> : <Text style={[styles.meta, { color: palette.muted }]}>No months imported</Text>}
     </View>
 
-    <InfoCard title="Privacy" palette={palette}><Text style={[styles.meta, { color: palette.muted }]}>Roster PDFs are parsed locally and the source PDF bytes are not stored. Crew lists, parsed roster data and salary settings stay on this device.</Text></InfoCard>
+    <InfoCard title="Privacy" palette={palette}><Text style={[styles.meta, { color: palette.muted }]}>Roster PDFs are parsed locally and the source PDF bytes are not stored. Crew lists, parsed roster data and salary settings stay on this device. Weather sends only an airport code to Open-Meteo — no roster or crew data.</Text></InfoCard>
     {rosters.length > 0 && <Pressable onPress={onErase} style={[styles.secondaryButton, { borderColor: palette.line }]}><Text style={[styles.secondaryText, { color: palette.text }]}>Erase local roster & pay data</Text></Pressable>}
 
     <Modal visible={profileOpen} transparent animationType="fade" onRequestClose={() => setProfileOpen(false)}>
@@ -593,7 +672,7 @@ function FlightDetail({ sectors, dateLabel, palette, onClose, onPrevious, onNext
     style={[styles.flightSheet, palette.sheetGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
   >
     <SwipeSurface style={styles.flightSheetContent} onSwipeLeft={onNext} onSwipeRight={onPrevious} threshold={44}>
-      <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sectors.map((sector) => sector.flightNumber).join(' · ')}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sectorRoute(sectors)}</Text><Text style={[styles.meta, { color: palette.muted }]}>{first.departureTime} – {last.arrivalTime}</Text></View></View>
+      <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sectors.map((sector) => sector.flightNumber).join(' · ')}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sectorRoute(sectors)}</Text><Text style={[styles.meta, { color: palette.muted }]}>{first.departureTime} – {last.arrivalTime}</Text><WeatherChip code={last.arrival} palette={palette} /></View></View>
       <Text style={[styles.swipeHint, { color: palette.muted }]}>{onPrevious ? '‹ ' : ''}swipe flight{onNext ? ' ›' : ''} · swipe down to close</Text>
       <Text style={[styles.flyingWith, { color: palette.accent }]}>{sectors.length > 1 ? `${sectors.length} flights · ` : ''}Flying with · {crewCount}</Text>
       <FlatList
@@ -670,6 +749,16 @@ function dateMetaFor(isoDate: string | undefined, dateLabel: string): { label: s
 }
 function routeChain(duty: Duty): string { return sectorRoute(duty.sectors); }
 function TimeCell({ label, value, palette }: { label: string; value: string; palette: Palette }) { return <View style={styles.timeCell}><Text numberOfLines={1} style={[styles.timeLabel, { color: palette.muted }]}>{label}</Text><Text style={[styles.timeValue, { color: palette.text }]}>{value}</Text></View>; }
+function WeatherChip({ code, palette }: { code: string; palette: Palette }) {
+  const weather = useAirportWeather(code);
+  if (!weather) return null;
+  const { icon, label } = weatherIcon(weather.weatherCode, weather.isDay);
+  return <View style={styles.weatherRow}>
+    <Text style={styles.weatherIcon}>{icon}</Text>
+    <Text style={[styles.weatherTemp, { color: palette.text }]}>{weather.temp}°</Text>
+    <Text numberOfLines={1} style={[styles.weatherMeta, { color: palette.muted }]}>{code} · {label} · {windDirectionLabel(weather.windDeg)} {weather.windSpeed}kt · {weather.pressure}hPa</Text>
+  </View>;
+}
 function PrimaryButton({ title, onPress, loading, palette }: { title: string; onPress: () => void; loading: boolean; palette: Palette }) { return <Pressable onPress={onPress} disabled={loading} style={[styles.primaryButton, { backgroundColor: palette.accent }]}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionText}>{title}</Text>}</Pressable>; }
 function Summary({ title, value, detail, palette }: { title: string; value: string; detail: string; palette: Palette }) { return <View style={[styles.summary, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.label, { color: palette.muted }]}>{title}</Text><Text style={[styles.summaryValue, { color: palette.text }]}>{value}</Text><Text style={[styles.meta, { color: palette.muted }]}>{detail}</Text></View>; }
 function InfoCard({ title, children, palette }: { title: string; children: React.ReactNode; palette: Palette }) { return <View style={[styles.infoCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}><Text style={[styles.cardTitle, { color: palette.text }]}>{title}</Text>{children}</View>; }
@@ -691,13 +780,14 @@ const styles = StyleSheet.create({
   timeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 }, timeCell: { flex: 1, minWidth: 0 },
   timeLabel: { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: .3 }, timeValue: { fontSize: 22, lineHeight: 27, fontWeight: '700', marginTop: 3, fontVariant: ['tabular-nums'] },
   heroFoot: { fontSize: 13, fontWeight: '600', marginTop: 14 },
+  weatherRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }, weatherIcon: { fontSize: 16 }, weatherTemp: { fontSize: 14, fontWeight: '800' }, weatherMeta: { flex: 1, fontSize: 11.5, fontWeight: '600' },
   summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14 }, summaryValue: { fontSize: 28, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] },
   upNext: { flex: 1, minHeight: 0, gap: 2 }, upNextList: { flex: 1 }, upNextRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
   upNextDate: { fontSize: 12, fontWeight: '700', letterSpacing: .4, width: 54 }, upNextRoute: { flex: 1, fontSize: 15, fontWeight: '600' }, upNextTimeBlock: { minWidth: 72, alignItems: 'flex-end' }, upNextTimeLabel: { fontSize: 8, lineHeight: 10, fontWeight: '700', letterSpacing: .45, marginBottom: 1 }, upNextTime: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
   primaryButton: { height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }, actionText: { color: '#fff', fontWeight: '700' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, titleActions: { flexDirection: 'row', gap: 7 }, compactButton: { height: 38, minWidth: 72, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 }, compactText: { fontWeight: '700', fontSize: 12 },
   monthNav: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, monthNavText: { fontSize: 12, fontWeight: '600' }, error: { fontSize: 12 },
-  emptyCard: { borderWidth: 1, borderRadius: 20, padding: 14 }, innerWindow: { flex: 1, minHeight: 0, borderWidth: 1, borderRadius: 20, overflow: 'hidden' }, listContent: { padding: 8, gap: 7, paddingBottom: 18 }, rosterCard: { borderWidth: 1, borderRadius: 16, padding: 13 }, flightCardTop: { flexDirection: 'row', justifyContent: 'space-between' }, flightNumber: { fontSize: 11, fontWeight: '700' }, flightNumbers: { fontSize: 11, lineHeight: 16, fontWeight: '700', marginTop: 4, flexShrink: 1 }, rosterRoute: { fontSize: 20, lineHeight: 25, fontWeight: '700', marginTop: 5 },
+  emptyCard: { borderWidth: 1, borderRadius: 20, padding: 14 }, innerWindow: { flex: 1, minHeight: 0, borderWidth: 1, borderRadius: 20, overflow: 'hidden' }, listContent: { padding: 8, gap: 7, paddingBottom: 18 }, rosterCard: { borderWidth: 1, borderRadius: 16, padding: 13 }, rosterCardToday: { borderWidth: 1.5 }, flightCardTop: { flexDirection: 'row', justifyContent: 'space-between' }, flightNumber: { fontSize: 11, fontWeight: '700' }, flightNumbers: { fontSize: 11, lineHeight: 16, fontWeight: '700', marginTop: 4, flexShrink: 1 }, rosterRoute: { fontSize: 20, lineHeight: 25, fontWeight: '700', marginTop: 5 },
   infoCard: { borderWidth: 1, borderRadius: 20, padding: 14, gap: 3 }, cardTitle: { fontSize: 15, fontWeight: '700' }, settingsCard: { minHeight: 68, borderWidth: 1, borderRadius: 20, padding: 14, flexDirection: 'row', alignItems: 'center' }, chevron: { fontSize: 30 }, secondaryButton: { height: 48, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, secondaryText: { fontWeight: '600' },
   libraryCard: { borderWidth: 1, borderRadius: 20, padding: 14, minHeight: 88, maxHeight: 190 }, libraryList: { marginTop: 5 }, libraryRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth }, libraryMonth: { fontSize: 14, fontWeight: '700' }, deleteRosterButton: { minWidth: 58, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 }, deleteRosterText: { fontSize: 11, fontWeight: '700' },
   depthSurface: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 24, elevation: 5 },
