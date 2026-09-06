@@ -13,9 +13,10 @@ export type AirportWeather = {
 };
 
 export type ForecastDay = { date: string; weatherCode: number; tempMax: number; tempMin: number };
-type AirportForecast = { code: string; days: ForecastDay[]; fetchedAt: number };
+type AirportForecast = { code: string; days: ForecastDay[]; fetchedAt: number; startDate?: string };
 
 const STALE_AFTER_MS = 45 * 60 * 1000;
+const MAX_FORECAST_DAYS = 16;
 
 function makeCache<T extends { fetchedAt: number }>(storageKey: string) {
   function load(): Record<string, T> {
@@ -42,6 +43,47 @@ function makeCache<T extends { fetchedAt: number }>(storageKey: string) {
 const weatherCache = makeCache<AirportWeather>('khavair.weather.v1');
 const forecastCache = makeCache<AirportForecast>('khavair.forecast.v1');
 
+function validIsoDate(value: string | undefined): value is string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function addIsoDays(value: string, offset: number): string {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + offset));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+}
+
+function normalizedDays(days: number): number {
+  return Math.max(1, Math.min(MAX_FORECAST_DAYS, Math.trunc(days) || 1));
+}
+
+function forecastCacheKey(code: string, startDate?: string): string {
+  return validIsoDate(startDate) ? `${code}:${startDate}` : code;
+}
+
+function selectForecastDays(days: ForecastDay[], requestedDays: number, startDate?: string): ForecastDay[] | undefined {
+  const count = normalizedDays(requestedDays);
+  if (!validIsoDate(startDate)) return days.length >= count ? days.slice(0, count) : undefined;
+  const startIndex = days.findIndex((day) => day.date === startDate);
+  if (startIndex < 0 || days.length - startIndex < count) return undefined;
+  return days.slice(startIndex, startIndex + count);
+}
+
+function cachedForecast(code: string, days: number, startDate?: string): AirportForecast | undefined {
+  const exact = forecastCache.get(forecastCacheKey(code, startDate));
+  if (exact && selectForecastDays(exact.days, days, startDate)) return exact;
+  // Compatibility with the original per-airport cache: if its date range already contains
+  // the requested duty date, reuse it immediately instead of throwing away a good cache.
+  if (validIsoDate(startDate)) {
+    const legacy = forecastCache.get(code);
+    if (legacy && selectForecastDays(legacy.days, days, startDate)) return legacy;
+  }
+  return undefined;
+}
+
 async function fetchAirportWeather(code: string): Promise<AirportWeather | undefined> {
   const coords = airportCoords(code);
   if (!coords) return undefined;
@@ -65,10 +107,14 @@ async function fetchAirportWeather(code: string): Promise<AirportWeather | undef
   return weather;
 }
 
-async function fetchAirportForecast(code: string, days: number): Promise<ForecastDay[] | undefined> {
+async function fetchAirportForecast(code: string, days: number, startDate?: string): Promise<ForecastDay[] | undefined> {
   const coords = airportCoords(code);
   if (!coords) return undefined;
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=${days}`;
+  const count = normalizedDays(days);
+  const range = validIsoDate(startDate)
+    ? `&start_date=${startDate}&end_date=${addIsoDays(startDate, count - 1)}`
+    : `&forecast_days=${count}`;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto${range}`;
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Forecast request failed (${response.status})`);
   const data = await response.json();
@@ -80,7 +126,7 @@ async function fetchAirportForecast(code: string, days: number): Promise<Forecas
     tempMax: Math.round(daily.temperature_2m_max[index]),
     tempMin: Math.round(daily.temperature_2m_min[index]),
   }));
-  forecastCache.set(code, { code, days: result, fetchedAt: Date.now() });
+  forecastCache.set(forecastCacheKey(code, startDate), { code, days: result, fetchedAt: Date.now(), startDate: validIsoDate(startDate) ? startDate : undefined });
   return result;
 }
 
@@ -119,21 +165,33 @@ export function useAirportWeather(code: string | undefined): AirportWeather | un
   return weather;
 }
 
-/** Same immediate-cache/background-refresh shape as useAirportWeather, for the daily forecast. */
-export function useAirportForecast(code: string | undefined, days: number): ForecastDay[] | undefined {
-  const [forecast, setForecast] = useState<ForecastDay[] | undefined>(() => (code ? forecastCache.get(code)?.days : undefined));
+/**
+ * Same immediate-cache/background-refresh shape as useAirportWeather, for the daily
+ * forecast. startDate pins the returned window to the roster/duty date instead of to
+ * whichever calendar day happens to be "today" at the destination.
+ */
+export function useAirportForecast(code: string | undefined, days: number, startDate?: string): ForecastDay[] | undefined {
+  const readCached = () => {
+    if (!code) return undefined;
+    const cached = cachedForecast(code, days, startDate);
+    return cached ? selectForecastDays(cached.days, days, startDate) : undefined;
+  };
+  const [forecast, setForecast] = useState<ForecastDay[] | undefined>(readCached);
 
   useEffect(() => {
-    setForecast(code ? forecastCache.get(code)?.days : undefined);
+    setForecast(readCached());
     if (!code) return;
 
     let cancelled = false;
     const refreshIfStale = () => {
       if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-      const cached = forecastCache.get(code);
-      if (cached && cached.days.length >= days && Date.now() - cached.fetchedAt < STALE_AFTER_MS) return;
-      fetchAirportForecast(code, days)
-        .then((fresh) => { if (fresh && !cancelled) setForecast(fresh); })
+      const cached = cachedForecast(code, days, startDate);
+      if (cached && Date.now() - cached.fetchedAt < STALE_AFTER_MS) return;
+      fetchAirportForecast(code, days, startDate)
+        .then((fresh) => {
+          if (!fresh || cancelled) return;
+          setForecast(selectForecastDays(fresh, days, startDate));
+        })
         .catch(() => { /* keep showing whatever was cached (or nothing) — never surface a fetch error here */ });
     };
 
@@ -144,7 +202,7 @@ export function useAirportForecast(code: string | undefined, days: number): Fore
       cancelled = true;
       if (typeof window !== 'undefined') window.removeEventListener('online', onOnline);
     };
-  }, [code, days]);
+  }, [code, days, startDate]);
 
   return forecast;
 }
@@ -154,12 +212,12 @@ export function useAirportForecast(code: string | undefined, days: number): Fore
  * arrival airports), so the chip and its forecast popup already have data by the time the
  * user opens them — not just whichever flight happens to be on screen right now.
  */
-export function prefetchStationWeather(requests: { code: string; days: number }[]): void {
+export function prefetchStationWeather(requests: { code: string; days: number; startDate?: string }[]): void {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-  for (const { code, days } of requests) {
+  for (const { code, days, startDate } of requests) {
     const cachedWeather = weatherCache.get(code);
     if (!cachedWeather || Date.now() - cachedWeather.fetchedAt >= STALE_AFTER_MS) fetchAirportWeather(code).catch(() => {});
-    const cachedForecast = forecastCache.get(code);
-    if (!cachedForecast || cachedForecast.days.length < days || Date.now() - cachedForecast.fetchedAt >= STALE_AFTER_MS) fetchAirportForecast(code, days).catch(() => {});
+    const cached = cachedForecast(code, days, startDate);
+    if (!cached || Date.now() - cached.fetchedAt >= STALE_AFTER_MS) fetchAirportForecast(code, days, startDate).catch(() => {});
   }
 }
