@@ -225,7 +225,7 @@ export default function Root({ children }: { children: ReactNode }) {
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-title" content="KhaVair" />
       <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-      <meta name="format-detection" content="no" />
+      <meta name="format-detection" content="telephone=no" />
       <meta name="referrer" content="no-referrer" />
       <meta name="description" content="Private cabin crew roster, per diem and pay companion." />
       <link rel="manifest" href="manifest.webmanifest" />
