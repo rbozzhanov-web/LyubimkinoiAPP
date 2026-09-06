@@ -63,7 +63,7 @@ const REGISTER_SW = `
       const UPDATE_TITLE_SPECIAL = 'Lyubimkina there is a new version available for you';
       const UPDATE_TITLE_NORMAL = 'A new version of KhaVair is available.';
       // Keep this short and update it with each published version.
-      const UPDATE_NOTICE = 'New: tap the weather on Home or in flight details for a short forecast, now available offline too.';
+      const UPDATE_NOTICE = 'Destination weather now appears for Antalya and forecasts follow the duty date.';
 
       const specialModeActive = () => {
         try {
