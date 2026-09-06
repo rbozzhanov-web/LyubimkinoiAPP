@@ -243,11 +243,11 @@ export function useAirportWeather(code: string | undefined): AirportWeather | un
  * range spans the actual layover, from arrival through the next departure day.
  */
 export function useAirportForecast(code: string | undefined, days: number, startDate?: string): ForecastDay[] | undefined {
-  const window = code ? resolveLayoverWindow(code, days, startDate) : { startDate, days: normalizedDays(days) };
+  const forecastWindow = code ? resolveLayoverWindow(code, days, startDate) : { startDate, days: normalizedDays(days) };
   const readCached = () => {
     if (!code) return undefined;
-    const cached = cachedForecast(code, window.days, window.startDate);
-    return cached ? selectForecastDays(cached.days, window.days, window.startDate) : undefined;
+    const cached = cachedForecast(code, forecastWindow.days, forecastWindow.startDate);
+    return cached ? selectForecastDays(cached.days, forecastWindow.days, forecastWindow.startDate) : undefined;
   };
   const [forecast, setForecast] = useState<ForecastDay[] | undefined>(readCached);
 
@@ -258,12 +258,12 @@ export function useAirportForecast(code: string | undefined, days: number, start
     let cancelled = false;
     const refreshIfStale = () => {
       if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-      const cached = cachedForecast(code, window.days, window.startDate);
+      const cached = cachedForecast(code, forecastWindow.days, forecastWindow.startDate);
       if (cached && Date.now() - cached.fetchedAt < STALE_AFTER_MS) return;
-      fetchAirportForecast(code, window.days, window.startDate)
+      fetchAirportForecast(code, forecastWindow.days, forecastWindow.startDate)
         .then((fresh) => {
           if (!fresh || cancelled) return;
-          setForecast(selectForecastDays(fresh, window.days, window.startDate));
+          setForecast(selectForecastDays(fresh, forecastWindow.days, forecastWindow.startDate));
         })
         .catch(() => { /* keep showing whatever was cached (or nothing) — never surface a fetch error here */ });
     };
@@ -275,7 +275,7 @@ export function useAirportForecast(code: string | undefined, days: number, start
       cancelled = true;
       if (typeof window !== 'undefined') window.removeEventListener('online', onOnline);
     };
-  }, [code, window.days, window.startDate]);
+  }, [code, forecastWindow.days, forecastWindow.startDate]);
 
   return forecast;
 }
@@ -289,10 +289,10 @@ export function prefetchStationWeather(requests: { code: string; days: number; s
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
   for (const request of requests) {
     const { code } = request;
-    const window = resolveLayoverWindow(code, request.days, request.startDate);
+    const forecastWindow = resolveLayoverWindow(code, request.days, request.startDate);
     const cachedWeather = weatherCache.get(code);
     if (!cachedWeather || Date.now() - cachedWeather.fetchedAt >= STALE_AFTER_MS) fetchAirportWeather(code).catch(() => {});
-    const cached = cachedForecast(code, window.days, window.startDate);
-    if (!cached || Date.now() - cached.fetchedAt >= STALE_AFTER_MS) fetchAirportForecast(code, window.days, window.startDate).catch(() => {});
+    const cached = cachedForecast(code, forecastWindow.days, forecastWindow.startDate);
+    if (!cached || Date.now() - cached.fetchedAt >= STALE_AFTER_MS) fetchAirportForecast(code, forecastWindow.days, forecastWindow.startDate).catch(() => {});
   }
 }
