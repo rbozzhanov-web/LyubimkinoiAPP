@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { SalaryCard } from './SalaryCard';
 import { SalarySettingsSheet } from './SalarySettingsSheet';
 import { SwipeSurface, type SwipeSurfaceHandle } from './SwipeSurface';
-import { IOSSheet } from './IOSOverlay';
+import { IOSDialog, IOSSheet } from './IOSOverlay';
 import { softHaptic } from './haptics';
 import { exportRosterCalendar } from '@/src/domain/calendar';
 import type { Duty, GroundEvent, Sector } from '@/src/domain/types';
@@ -20,7 +20,8 @@ import { clearStoredRosters, loadStoredRosters, removeStoredRoster, upsertStored
 import { activateSpecialPayPreset } from '@/src/storage/specialPayPreset';
 import { clearLovedMode, clearSavedTheme, loadLovedMode, loadSavedTheme, saveLovedMode, saveTheme, type SavedTheme } from '@/src/storage/lovedModeStorage';
 import { clearCrewProfile, loadCrewProfile, saveCrewProfile } from '@/src/storage/profileStorage';
-import { useAirportWeather } from '@/src/weather/weatherService';
+import { airportCoords } from '@/src/weather/airports';
+import { prefetchStationWeather, useAirportForecast, useAirportWeather } from '@/src/weather/weatherService';
 import { weatherIcon, windDirectionLabel } from '@/src/weather/weatherCodes';
 
 type Tab = 'Home' | 'Roster' | 'Money' | 'More';
@@ -69,6 +70,10 @@ const todayGlow = (palette: Palette) => ({
 const LIST_TOP_PADDING = 8;
 const LIST_ROW_GAP = 7;
 const ROW_HEIGHT_ESTIMATE = { flight: 108, ground: 70 } as const;
+// Fixed, not derived from layover length: KhaVair has no stay/rest-duration data (that
+// comes from eScrew's AIMS import, which KhaVair doesn't have), so there's no signal to
+// size the forecast window by.
+const FORECAST_DAYS = 2;
 function localTodayIso(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -127,6 +132,22 @@ export default function MainScreen() {
   const duties = useMemo(() => roster ? rosterToDuties(roster) : [], [roster]);
   const selectedSector = duties.flatMap((duty) => duty.sectors).find((sector) => sector.id === selectedFlight);
   const allDuties = useMemo<RosterDuty[]>(() => rosters.flatMap((item) => rosterToDuties(item).map((duty) => ({ roster: item, duty }))), [rosters]);
+  useEffect(() => {
+    // Warms the weather/forecast cache for the next few duties' arrival airports, not just
+    // whichever flight happens to be on screen — so the chip and its popup already have
+    // data by the time the user gets there.
+    const now = Date.now();
+    const upcoming = timedDuties(allDuties).filter((item) => item.releaseMs >= now).slice(0, 6);
+    const seen = new Set<string>();
+    const requests: { code: string; days: number }[] = [];
+    for (const item of upcoming) {
+      const last = item.duty.sectors[item.duty.sectors.length - 1];
+      if (!last || seen.has(last.arrival)) continue;
+      seen.add(last.arrival);
+      requests.push({ code: last.arrival, days: FORECAST_DAYS });
+    }
+    if (requests.length) prefetchStationWeather(requests);
+  }, [allDuties]);
   const tabStep = tabBarWidth / TABS.length;
   const tabIndicatorX = Animated.multiply(tabSelection, tabStep);
   const codeShakeX = shakeAnim.interpolate({ inputRange: [-1, 0, 1], outputRange: [-7, 0, 7] });
@@ -751,13 +772,43 @@ function routeChain(duty: Duty): string { return sectorRoute(duty.sectors); }
 function TimeCell({ label, value, palette }: { label: string; value: string; palette: Palette }) { return <View style={styles.timeCell}><Text numberOfLines={1} style={[styles.timeLabel, { color: palette.muted }]}>{label}</Text><Text style={[styles.timeValue, { color: palette.text }]}>{value}</Text></View>; }
 function WeatherChip({ code, palette }: { code: string; palette: Palette }) {
   const weather = useAirportWeather(code);
-  if (!weather) return null;
-  const { icon, label } = weatherIcon(weather.weatherCode, weather.isDay);
-  return <View style={styles.weatherRow}>
-    <Text style={styles.weatherIcon}>{icon}</Text>
-    <Text style={[styles.weatherTemp, { color: palette.text }]}>{weather.temp}°</Text>
-    <Text numberOfLines={1} style={[styles.weatherMeta, { color: palette.muted }]}>{code} · {label} · {windDirectionLabel(weather.windDeg)} {weather.windSpeed}kt · {weather.pressure}hPa</Text>
-  </View>;
+  const forecast = useAirportForecast(code, FORECAST_DAYS);
+  const [open, setOpen] = useState(false);
+  // Gate on whether the station is one we can ever show weather for, not on whether data
+  // happens to be cached yet — a known airport with no cache (a true first-ever offline
+  // visit) still shows the row with a fallback, rather than vanishing outright.
+  if (!airportCoords(code)) return null;
+  const conditions = weather ? weatherIcon(weather.weatherCode, weather.isDay) : undefined;
+  return <>
+    <Pressable onPress={() => setOpen(true)} accessibilityRole="button" accessibilityLabel={`Weather forecast at ${code}`} style={styles.weatherRow}>
+      <Text style={styles.weatherIcon}>{conditions?.icon ?? '✈︎'}</Text>
+      {weather ? <>
+        <Text style={[styles.weatherTemp, { color: palette.text }]}>{weather.temp}°</Text>
+        <Text numberOfLines={1} style={[styles.weatherMeta, { color: palette.muted }]}>{code} · {conditions!.label} · {windDirectionLabel(weather.windDeg)} {weather.windSpeed}kt · {weather.pressure}hPa</Text>
+      </> : (
+        <Text numberOfLines={1} style={[styles.weatherMeta, { color: palette.muted }]}>{code} · Weather unavailable offline</Text>
+      )}
+    </Pressable>
+    <IOSDialog visible={open} onClose={() => setOpen(false)} style={[styles.forecastPopup, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+      <Text style={[styles.label, { color: palette.muted }]}>FORECAST · {code}</Text>
+      {forecast && forecast.length > 0 ? <View style={styles.forecastList}>
+        {forecast.map((day) => {
+          const dayIcon = weatherIcon(day.weatherCode, true).icon;
+          return <View key={day.date} style={[styles.forecastRow, { borderColor: palette.line }]}>
+            <Text style={[styles.forecastDay, { color: palette.muted }]}>{forecastDayLabel(day.date)}</Text>
+            <Text style={styles.forecastIcon}>{dayIcon}</Text>
+            <Text style={[styles.forecastTemp, { color: palette.text }]}>{day.tempMax}° / {day.tempMin}°</Text>
+          </View>;
+        })}
+      </View> : <Text style={[styles.meta, { color: palette.muted, marginTop: 6 }]}>Forecast unavailable offline.</Text>}
+    </IOSDialog>
+  </>;
+}
+function forecastDayLabel(value: string): string {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const weekday = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][date.getUTCDay()];
+  return `${weekday} ${day}`;
 }
 function PrimaryButton({ title, onPress, loading, palette }: { title: string; onPress: () => void; loading: boolean; palette: Palette }) { return <Pressable onPress={onPress} disabled={loading} style={[styles.primaryButton, { backgroundColor: palette.accent }]}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionText}>{title}</Text>}</Pressable>; }
 function Summary({ title, value, detail, palette }: { title: string; value: string; detail: string; palette: Palette }) { return <View style={[styles.summary, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.label, { color: palette.muted }]}>{title}</Text><Text style={[styles.summaryValue, { color: palette.text }]}>{value}</Text><Text style={[styles.meta, { color: palette.muted }]}>{detail}</Text></View>; }
@@ -781,6 +832,7 @@ const styles = StyleSheet.create({
   timeLabel: { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: .3 }, timeValue: { fontSize: 22, lineHeight: 27, fontWeight: '700', marginTop: 3, fontVariant: ['tabular-nums'] },
   heroFoot: { fontSize: 13, fontWeight: '600', marginTop: 14 },
   weatherRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }, weatherIcon: { fontSize: 16 }, weatherTemp: { fontSize: 14, fontWeight: '800' }, weatherMeta: { flex: 1, fontSize: 11.5, fontWeight: '600' },
+  forecastPopup: { width: '88%', maxWidth: 340, borderWidth: 1, borderRadius: 22, padding: 18 }, forecastList: { marginTop: 10, gap: 2 }, forecastRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth }, forecastDay: { width: 44, fontSize: 12, fontWeight: '700' }, forecastIcon: { fontSize: 18 }, forecastTemp: { flex: 1, textAlign: 'right', fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
   summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14 }, summaryValue: { fontSize: 28, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] },
   upNext: { flex: 1, minHeight: 0, gap: 2 }, upNextList: { flex: 1 }, upNextRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
   upNextDate: { fontSize: 12, fontWeight: '700', letterSpacing: .4, width: 54 }, upNextRoute: { flex: 1, fontSize: 15, fontWeight: '600' }, upNextTimeBlock: { minWidth: 72, alignItems: 'flex-end' }, upNextTimeLabel: { fontSize: 8, lineHeight: 10, fontWeight: '700', letterSpacing: .45, marginBottom: 1 }, upNextTime: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
