@@ -199,7 +199,7 @@ const LOCK_ZOOM = `
     }, { passive: false });
     document.addEventListener('keydown', (event) => {
       if ((event.ctrlKey || event.metaKey) && ['+', '-', '=', '0'].includes(event.key)) event.preventDefault();
-    }, { passive: false });
+    });
     let lastTouchEnd = 0;
     document.addEventListener('touchend', (event) => {
       const now = Date.now();
