@@ -63,7 +63,7 @@ const REGISTER_SW = `
       const UPDATE_TITLE_SPECIAL = 'Lyubimkina there is a new version available for you';
       const UPDATE_TITLE_NORMAL = 'A new version of KhaVair is available.';
       // Keep this short and update it with each published version.
-      const UPDATE_NOTICE = 'Weather in flight details now follows the layover station, with clear loading, retry and offline states.';
+      const UPDATE_NOTICE = 'Weather cards now show the arrival airport; base and non-layover forecasts show arrival day only.';
 
       const specialModeActive = () => {
         try {
@@ -199,7 +199,7 @@ const LOCK_ZOOM = `
     }, { passive: false });
     document.addEventListener('keydown', (event) => {
       if ((event.ctrlKey || event.metaKey) && ['+', '-', '=', '0'].includes(event.key)) event.preventDefault();
-    });
+    }, { passive: false });
     let lastTouchEnd = 0;
     document.addEventListener('touchend', (event) => {
       const now = Date.now();
@@ -225,7 +225,7 @@ export default function Root({ children }: { children: ReactNode }) {
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-title" content="KhaVair" />
       <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-      <meta name="format-detection" content="telephone=no" />
+      <meta name="format-detection" content="no" />
       <meta name="referrer" content="no-referrer" />
       <meta name="description" content="Private cabin crew roster, per diem and pay companion." />
       <link rel="manifest" href="manifest.webmanifest" />
