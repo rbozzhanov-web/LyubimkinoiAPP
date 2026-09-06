@@ -27,6 +27,7 @@ export const AIRPORT_COORDS: Record<string, { lat: number; lon: number; name: st
   CDG: { lat: 49.0097, lon: 2.5479, name: 'Paris CDG' },
   AMS: { lat: 52.3086, lon: 4.7639, name: 'Amsterdam' },
   IST: { lat: 41.2753, lon: 28.7519, name: 'Istanbul' },
+  AYT: { lat: 36.898701, lon: 30.800501, name: 'Antalya' },
 
   // Middle East
   DXB: { lat: 25.2532, lon: 55.3657, name: 'Dubai' },
