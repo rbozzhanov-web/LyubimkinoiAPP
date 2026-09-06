@@ -21,7 +21,7 @@ import { activateSpecialPayPreset } from '@/src/storage/specialPayPreset';
 import { clearLovedMode, clearSavedTheme, loadLovedMode, loadSavedTheme, saveLovedMode, saveTheme, type SavedTheme } from '@/src/storage/lovedModeStorage';
 import { clearCrewProfile, loadCrewProfile, saveCrewProfile } from '@/src/storage/profileStorage';
 import { airportCoords } from '@/src/weather/airports';
-import { prefetchStationWeather, useAirportForecast, useAirportWeather } from '@/src/weather/weatherService';
+import { prefetchStationWeather, useAirportForecastState, useAirportWeather } from '@/src/weather/weatherService';
 import { weatherIcon, windDirectionLabel } from '@/src/weather/weatherCodes';
 
 type Tab = 'Home' | 'Roster' | 'Money' | 'More';
@@ -46,7 +46,6 @@ const WEB_GLASS = Platform.OS === 'web'
 const WEB_TAB_GLASS = Platform.OS === 'web'
   ? ({ backdropFilter: 'blur(30px) saturate(1.38)', WebkitBackdropFilter: 'blur(30px) saturate(1.38)' } as any)
   : undefined;
-// Special Mode glass recipes (card/tab/sheet), matching the Kha♥air glass material spec.
 const WEB_CARD_GLASS_LOVED = Platform.OS === 'web'
   ? ({ backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)' } as any)
   : undefined;
@@ -56,23 +55,12 @@ const WEB_TAB_GLASS_LOVED = Platform.OS === 'web'
 const WEB_SHEET_GLASS_LOVED = Platform.OS === 'web'
   ? ({ backdropFilter: 'blur(28px) saturate(1.4)', WebkitBackdropFilter: 'blur(28px) saturate(1.4)' } as any)
   : undefined;
-/**
- * All shadow* props must live in the same style object — react-native-web derives a single
- * boxShadow per object, so splitting shadowColor into a separate object in the style array
- * (rather than merging shadow properties key-by-key) makes the later object's missing
- * offset/radius/opacity silently zero out the shadow instead of merging with the earlier one.
- */
 const todayGlow = (palette: Palette) => ({
   shadowColor: palette.accent, shadowOffset: { width: 0, height: 8 }, shadowOpacity: .32, shadowRadius: 20, elevation: 8,
 });
-// Matches styles.listContent (padding:8, gap:7) — used by getItemLayout to compute an
-// authoritative scroll offset before rows are actually measured.
 const LIST_TOP_PADDING = 8;
 const LIST_ROW_GAP = 7;
 const ROW_HEIGHT_ESTIMATE = { flight: 108, ground: 70 } as const;
-// Fixed, not derived from layover length: KhaVair has no stay/rest-duration data (that
-// comes from eScrew's AIMS import, which KhaVair doesn't have), so there's no signal to
-// size the forecast window by.
 const FORECAST_DAYS = 2;
 function localTodayIso(): string {
   const now = new Date();
@@ -133,9 +121,6 @@ export default function MainScreen() {
   const selectedSector = duties.flatMap((duty) => duty.sectors).find((sector) => sector.id === selectedFlight);
   const allDuties = useMemo<RosterDuty[]>(() => rosters.flatMap((item) => rosterToDuties(item).map((duty) => ({ roster: item, duty }))), [rosters]);
   useEffect(() => {
-    // Warms the weather/forecast cache for the next few duties' arrival airports, not just
-    // whichever flight happens to be on screen — so the chip and its popup already have
-    // data by the time the user gets there.
     const now = Date.now();
     const upcoming = timedDuties(allDuties).filter((item) => item.releaseMs >= now).slice(0, 6);
     const seen = new Set<string>();
@@ -178,11 +163,6 @@ export default function MainScreen() {
   }), [dark, lovedMode]);
 
   useEffect(() => {
-    // The HTML shell's own background (behind #root, e.g. the safe-area/status-bar strip
-    // and overscroll bounce) is CSS-only and can only react to the OS color scheme — it
-    // has no way to see the manual Special Mode theme override. Once React is up, mirror
-    // the resolved palette onto it directly so the whole screen always matches, even when
-    // the manual override diverges from the OS scheme.
     if (typeof document === 'undefined') return;
     document.body.style.backgroundColor = palette.background;
     document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute('content', palette.background));
@@ -246,7 +226,6 @@ export default function MainScreen() {
     setUnlockOpen(true);
   };
   const toggleTheme = () => {
-    // Cycles Light -> Dark -> System (follows the OS scheme) -> Light...
     const next: SavedTheme | undefined = themeOverride === undefined ? 'light' : themeOverride === 'light' ? 'dark' : undefined;
     if (next === undefined) clearSavedTheme(); else saveTheme(next);
     setThemeOverride(next);
@@ -462,7 +441,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
           </View>
         </View>} />
     </View>}
-    {crewOpen && <FlightDetail sectors={duty.sectors} dateLabel={duty.dateLabel} forecastDate={forecastDate} palette={palette} onClose={() => setCrewOpen(false)} />}
+    {crewOpen && <FlightDetail sectors={duty.sectors} dateLabel={duty.dateLabel} weatherCode={last.arrival} forecastDate={forecastDate} palette={palette} onClose={() => setCrewOpen(false)} />}
   </View>;
 }
 
@@ -493,19 +472,10 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
     if (idx === -1) idx = rows.findIndex((row) => row.sortKey.slice(0, 10) > today);
     return idx;
   }, [rows, today]);
-  // Without this, scrollToIndex/initialScrollIndex have to guess an offset (via
-  // averageItemLength), render near it, measure, and correct — a multi-step process that
-  // reliably lands a few rows short of the target instead of putting it at the top. Caching
-  // each row's real measured height (falling back to a per-kind estimate before it's been
-  // measured) gives FlatList an authoritative offset up front, so it can jump there in one
-  // step, and accuracy only improves as more rows get measured.
   const heightFor = useCallback((row: RosterRow | undefined) => {
     if (!row) return ROW_HEIGHT_ESTIMATE.flight;
     return rowHeights.get(row.key) ?? ROW_HEIGHT_ESTIMATE[row.kind];
   }, [rowHeights]);
-  // Offsets are cached per `rows` array and only rebuilt (once, O(n)) when a row's height
-  // actually changes — otherwise every one of FlatList's frequent getItemLayout calls would
-  // redo the prefix-sum loop from scratch.
   const buildOffsets = useCallback(() => {
     const offsets: number[] = [];
     let offset = LIST_TOP_PADDING;
@@ -523,8 +493,6 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
     rowHeights.set(key, height);
     offsetsCache.current = null;
   }, [rowHeights]);
-  // Measured heights are keyed by row (not by month), so switching months would otherwise
-  // keep accumulating entries for every row ever seen across the whole session.
   useEffect(() => {
     rowHeights.clear();
     offsetsCache.current = null;
@@ -599,7 +567,7 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
         }} />
     </View>}
 
-    {selectedRow && <FlightDetail sectors={selectedRow.sectors} dateLabel={selectedRow.duty.dateLabel} palette={palette} onClose={() => onSelect(undefined)} onPrevious={selectedIndex > 0 ? () => onSelect(flights[selectedIndex - 1].sectors[0]!.id) : undefined} onNext={selectedIndex < flights.length - 1 ? () => onSelect(flights[selectedIndex + 1].sectors[0]!.id) : undefined} />}
+    {selectedRow && <FlightDetail sectors={selectedRow.sectors} dateLabel={selectedRow.duty.dateLabel} weatherCode={detailWeatherStation(selectedRow, roster?.subject?.base)} forecastDate={selectedRow.duty.date} palette={palette} onClose={() => onSelect(undefined)} onPrevious={selectedIndex > 0 ? () => onSelect(flights[selectedIndex - 1].sectors[0]!.id) : undefined} onNext={selectedIndex < flights.length - 1 ? () => onSelect(flights[selectedIndex + 1].sectors[0]!.id) : undefined} />}
   </View>;
 }
 
@@ -681,7 +649,7 @@ function MoreScreen({ rosters, profile, palette, onDeleteRoster, onProfileChange
   </View>;
 }
 
-function FlightDetail({ sectors, dateLabel, forecastDate, palette, onClose, onPrevious, onNext }: { sectors: Sector[]; dateLabel: string; forecastDate?: string; palette: Palette; onClose: () => void; onPrevious?: () => void; onNext?: () => void }) {
+function FlightDetail({ sectors, dateLabel, weatherCode, forecastDate, palette, onClose, onPrevious, onNext }: { sectors: Sector[]; dateLabel: string; weatherCode?: string; forecastDate?: string; palette: Palette; onClose: () => void; onPrevious?: () => void; onNext?: () => void }) {
   const [scrollAtTop, setScrollAtTop] = useState(true);
   const first = sectors[0]!;
   const last = sectors.at(-1)!;
@@ -697,7 +665,7 @@ function FlightDetail({ sectors, dateLabel, forecastDate, palette, onClose, onPr
     style={[styles.flightSheet, palette.sheetGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
   >
     <SwipeSurface style={styles.flightSheetContent} onSwipeLeft={onNext} onSwipeRight={onPrevious} threshold={44}>
-      <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sectors.map((sector) => sector.flightNumber).join(' · ')}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sectorRoute(sectors)}</Text><Text style={[styles.meta, { color: palette.muted }]}>{first.departureTime} – {last.arrivalTime}</Text><WeatherChip code={last.arrival} targetDate={forecastDate} palette={palette} /></View></View>
+      <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sectors.map((sector) => sector.flightNumber).join(' · ')}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sectorRoute(sectors)}</Text><Text style={[styles.meta, { color: palette.muted }]}>{first.departureTime} – {last.arrivalTime}</Text><WeatherChip code={weatherCode ?? last.arrival} targetDate={forecastDate} palette={palette} /></View></View>
       <Text style={[styles.swipeHint, { color: palette.muted }]}>{onPrevious ? '‹ ' : ''}swipe flight{onNext ? ' ›' : ''} · swipe down to close</Text>
       <Text style={[styles.flyingWith, { color: palette.accent }]}>{sectors.length > 1 ? `${sectors.length} flights · ` : ''}Flying with · {crewCount}</Text>
       <FlatList
@@ -777,14 +745,18 @@ function arrivalForecastDate(duty: Duty): string | undefined {
   const last = duty.sectors.at(-1);
   return duty.releaseDate ?? last?.date ?? duty.date;
 }
+function detailWeatherStation(card: FlightCardGroup, base?: string): string {
+  const first = card.sectors[0];
+  const last = card.sectors.at(-1);
+  if (!first || !last) return base ?? '';
+  const normalizedBase = base?.trim().toUpperCase();
+  return normalizedBase && first.departure.trim().toUpperCase() !== normalizedBase ? first.departure : last.arrival;
+}
 function TimeCell({ label, value, palette }: { label: string; value: string; palette: Palette }) { return <View style={styles.timeCell}><Text numberOfLines={1} style={[styles.timeLabel, { color: palette.muted }]}>{label}</Text><Text style={[styles.timeValue, { color: palette.text }]}>{value}</Text></View>; }
 function WeatherChip({ code, targetDate, palette }: { code: string; targetDate?: string; palette: Palette }) {
   const weather = useAirportWeather(code);
-  const forecast = useAirportForecast(code, FORECAST_DAYS, targetDate);
+  const { forecast, status: forecastStatus, retry } = useAirportForecastState(code, FORECAST_DAYS, targetDate);
   const [open, setOpen] = useState(false);
-  // Gate on whether the station is one we can ever show weather for, not on whether data
-  // happens to be cached yet — a known airport with no cache (a true first-ever offline
-  // visit) still shows the row with a fallback, rather than vanishing outright.
   if (!airportCoords(code)) return null;
   const currentConditions = weather ? weatherIcon(weather.weatherCode, weather.isDay) : undefined;
   const futureTarget = Boolean(targetDate && targetDate > localTodayIso());
@@ -795,14 +767,14 @@ function WeatherChip({ code, targetDate, palette }: { code: string; targetDate?:
       {futureTarget ? <>
         <Text style={styles.weatherIcon}>{targetConditions?.icon ?? '✈︎'}</Text>
         {targetForecast && <Text style={[styles.weatherTemp, { color: palette.text }]}>{targetForecast.tempMax}°/{targetForecast.tempMin}°</Text>}
-        <Text numberOfLines={1} style={[styles.weatherMeta, { color: palette.muted }]}>{code} · {targetDate ? forecastDayLabel(targetDate) : ''}{targetConditions ? ` · ${targetConditions.label}` : ' · Forecast unavailable'}</Text>
+        <Text numberOfLines={1} style={[styles.weatherMeta, { color: palette.muted }]}>{code} · {targetDate ? forecastDayLabel(targetDate) : ''}{targetConditions ? ` · ${targetConditions.label}` : forecastStatus === 'loading' ? ' · Loading forecast' : ' · Forecast unavailable'}</Text>
       </> : <>
         <Text style={styles.weatherIcon}>{currentConditions?.icon ?? '✈︎'}</Text>
         {weather ? <>
           <Text style={[styles.weatherTemp, { color: palette.text }]}>{weather.temp}°</Text>
           <Text numberOfLines={1} style={[styles.weatherMeta, { color: palette.muted }]}>{code} · {currentConditions!.label} · {windDirectionLabel(weather.windDeg)} {weather.windSpeed}kt · {weather.pressure}hPa</Text>
         </> : (
-          <Text numberOfLines={1} style={[styles.weatherMeta, { color: palette.muted }]}>{code} · Weather unavailable offline</Text>
+          <Text numberOfLines={1} style={[styles.weatherMeta, { color: palette.muted }]}>{code} · Weather unavailable</Text>
         )}
       </>}
     </Pressable>
@@ -820,7 +792,11 @@ function WeatherChip({ code, targetDate, palette }: { code: string; targetDate?:
               </View>;
             })}
           </View>
-        : <Text style={[styles.meta, { color: palette.muted, marginTop: 6 }]}>Forecast unavailable offline.</Text>}
+        : forecastStatus === 'loading'
+          ? <View style={styles.forecastStateRow}><ActivityIndicator size="small" /><Text style={[styles.meta, { color: palette.muted }]}>Loading forecast…</Text></View>
+          : forecastStatus === 'offline'
+            ? <Text style={[styles.meta, { color: palette.muted, marginTop: 6 }]}>Forecast unavailable while offline.</Text>
+            : <Pressable onPress={retry} accessibilityRole="button" style={styles.forecastRetry}><Text style={[styles.meta, { color: palette.accent }]}>Forecast unavailable. Tap to retry.</Text></Pressable>}
     </IOSDialog>
   </>;
 }
@@ -852,7 +828,7 @@ const styles = StyleSheet.create({
   timeLabel: { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: .3 }, timeValue: { fontSize: 22, lineHeight: 27, fontWeight: '700', marginTop: 3, fontVariant: ['tabular-nums'] },
   heroFoot: { fontSize: 13, fontWeight: '600', marginTop: 14 },
   weatherRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }, weatherIcon: { fontSize: 16 }, weatherTemp: { fontSize: 14, fontWeight: '800' }, weatherMeta: { flex: 1, fontSize: 11.5, fontWeight: '600' },
-  forecastPopup: { width: '88%', maxWidth: 340, borderWidth: 1, borderRadius: 22, padding: 18 }, forecastList: { marginTop: 10, gap: 6 }, forecastLine: { flexDirection: 'row', alignItems: 'center', gap: 8 }, forecastDay: { width: 42, fontWeight: '700' }, forecastLabel: { flex: 1 }, forecastTemp: { fontWeight: '700', fontVariant: ['tabular-nums'] },
+  forecastPopup: { width: '88%', maxWidth: 340, borderWidth: 1, borderRadius: 22, padding: 18 }, forecastList: { marginTop: 10, gap: 6 }, forecastLine: { flexDirection: 'row', alignItems: 'center', gap: 8 }, forecastDay: { width: 42, fontWeight: '700' }, forecastLabel: { flex: 1 }, forecastTemp: { fontWeight: '700', fontVariant: ['tabular-nums'] }, forecastStateRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }, forecastRetry: { marginTop: 6, paddingVertical: 4 },
   summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14 }, summaryValue: { fontSize: 28, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] },
   upNext: { flex: 1, minHeight: 0, gap: 2 }, upNextList: { flex: 1 }, upNextRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
   upNextDate: { fontSize: 12, fontWeight: '700', letterSpacing: .4, width: 54 }, upNextRoute: { flex: 1, fontSize: 15, fontWeight: '600' }, upNextTimeBlock: { minWidth: 72, alignItems: 'flex-end' }, upNextTimeLabel: { fontSize: 8, lineHeight: 10, fontWeight: '700', letterSpacing: .45, marginBottom: 1 }, upNextTime: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
