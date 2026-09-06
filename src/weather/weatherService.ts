@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { airportCoords } from './airports';
+import { loadStoredRosters } from '@/src/storage/rosterStorage';
 
 export type AirportWeather = {
   code: string;
@@ -14,6 +15,7 @@ export type AirportWeather = {
 
 export type ForecastDay = { date: string; weatherCode: number; tempMax: number; tempMin: number };
 type AirportForecast = { code: string; days: ForecastDay[]; fetchedAt: number; startDate?: string };
+type ForecastWindow = { startDate?: string; days: number };
 
 const STALE_AFTER_MS = 45 * 60 * 1000;
 const MAX_FORECAST_DAYS = 16;
@@ -56,6 +58,76 @@ function addIsoDays(value: string, offset: number): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
 }
 
+function isoDayNumber(value: string): number {
+  const [year, month, day] = value.split('-').map(Number);
+  return Math.floor(Date.UTC(year, month - 1, day) / 86400000);
+}
+
+function inclusiveIsoDays(start: string, end: string): number {
+  return Math.max(1, isoDayNumber(end) - isoDayNumber(start) + 1);
+}
+
+function clockMinutes(value: string | undefined): number | undefined {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value ?? '');
+  if (!match) return undefined;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours < 24 && minutes < 60 ? hours * 60 + minutes : undefined;
+}
+
+function sectorArrivalDate(sector: { date: string; arrivalDate?: string; timeOut?: string; timeIn?: string }): string {
+  if (validIsoDate(sector.arrivalDate)) return sector.arrivalDate;
+  const out = clockMinutes(sector.timeOut);
+  const arrival = clockMinutes(sector.timeIn);
+  return out !== undefined && arrival !== undefined && arrival < out ? addIsoDays(sector.date, 1) : sector.date;
+}
+
+/**
+ * Resolve the weather window from the actual stay at the destination: arrival day through
+ * the calendar day of the next duty that departs from the same station. The caller's
+ * startDate is only a hint used to choose the matching arrival; it is not treated as the
+ * layover end. This keeps the popup aligned to the roster's real layover period.
+ */
+function resolveLayoverWindow(code: string, requestedDays: number, startDateHint?: string): ForecastWindow {
+  const fallback = { startDate: validIsoDate(startDateHint) ? startDateHint : undefined, days: normalizedDays(requestedDays) };
+  if (typeof localStorage === 'undefined') return fallback;
+
+  try {
+    const target = code.trim().toUpperCase();
+    const sectors = loadStoredRosters()
+      .flatMap((roster) => [...roster.sectors, ...(roster.boundarySectors ?? [])])
+      .filter((sector) => validIsoDate(sector.date))
+      .sort((a, b) => `${a.date}T${a.timeOut || '00:00'}`.localeCompare(`${b.date}T${b.timeOut || '00:00'}`));
+
+    const arrivals = sectors
+      .map((sector) => ({ sector, arrivalDate: sectorArrivalDate(sector) }))
+      .filter((item) => item.sector.arrivalAirport?.trim().toUpperCase() === target);
+    if (!arrivals.length) return fallback;
+
+    const hintedDay = validIsoDate(startDateHint) ? isoDayNumber(startDateHint) : undefined;
+    const arrival = [...arrivals].sort((a, b) => {
+      if (hintedDay === undefined) return b.arrivalDate.localeCompare(a.arrivalDate);
+      return Math.abs(isoDayNumber(a.arrivalDate) - hintedDay) - Math.abs(isoDayNumber(b.arrivalDate) - hintedDay);
+    })[0];
+    if (!arrival) return fallback;
+
+    const arrivalMoment = `${arrival.arrivalDate}T${arrival.sector.timeIn || '00:00'}`;
+    const nextDeparture = sectors.find((sector) =>
+      sector.dutyIndex !== arrival.sector.dutyIndex &&
+      sector.departureAirport?.trim().toUpperCase() === target &&
+      `${sector.date}T${sector.timeOut || '00:00'}` > arrivalMoment
+    );
+    if (!nextDeparture) return { startDate: arrival.arrivalDate, days: fallback.days };
+
+    return {
+      startDate: arrival.arrivalDate,
+      days: normalizedDays(inclusiveIsoDays(arrival.arrivalDate, nextDeparture.date)),
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 function normalizedDays(days: number): number {
   return Math.max(1, Math.min(MAX_FORECAST_DAYS, Math.trunc(days) || 1));
 }
@@ -76,7 +148,7 @@ function cachedForecast(code: string, days: number, startDate?: string): Airport
   const exact = forecastCache.get(forecastCacheKey(code, startDate));
   if (exact && selectForecastDays(exact.days, days, startDate)) return exact;
   // Compatibility with the original per-airport cache: if its date range already contains
-  // the requested duty date, reuse it immediately instead of throwing away a good cache.
+  // the requested layover start, reuse it immediately instead of throwing away a good cache.
   if (validIsoDate(startDate)) {
     const legacy = forecastCache.get(code);
     if (legacy && selectForecastDays(legacy.days, days, startDate)) return legacy;
@@ -167,14 +239,15 @@ export function useAirportWeather(code: string | undefined): AirportWeather | un
 
 /**
  * Same immediate-cache/background-refresh shape as useAirportWeather, for the daily
- * forecast. startDate pins the returned window to the roster/duty date instead of to
- * whichever calendar day happens to be "today" at the destination.
+ * forecast. The requested date is resolved against the stored roster so the returned
+ * range spans the actual layover, from arrival through the next departure day.
  */
 export function useAirportForecast(code: string | undefined, days: number, startDate?: string): ForecastDay[] | undefined {
+  const forecastWindow = code ? resolveLayoverWindow(code, days, startDate) : { startDate, days: normalizedDays(days) };
   const readCached = () => {
     if (!code) return undefined;
-    const cached = cachedForecast(code, days, startDate);
-    return cached ? selectForecastDays(cached.days, days, startDate) : undefined;
+    const cached = cachedForecast(code, forecastWindow.days, forecastWindow.startDate);
+    return cached ? selectForecastDays(cached.days, forecastWindow.days, forecastWindow.startDate) : undefined;
   };
   const [forecast, setForecast] = useState<ForecastDay[] | undefined>(readCached);
 
@@ -185,12 +258,12 @@ export function useAirportForecast(code: string | undefined, days: number, start
     let cancelled = false;
     const refreshIfStale = () => {
       if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-      const cached = cachedForecast(code, days, startDate);
+      const cached = cachedForecast(code, forecastWindow.days, forecastWindow.startDate);
       if (cached && Date.now() - cached.fetchedAt < STALE_AFTER_MS) return;
-      fetchAirportForecast(code, days, startDate)
+      fetchAirportForecast(code, forecastWindow.days, forecastWindow.startDate)
         .then((fresh) => {
           if (!fresh || cancelled) return;
-          setForecast(selectForecastDays(fresh, days, startDate));
+          setForecast(selectForecastDays(fresh, forecastWindow.days, forecastWindow.startDate));
         })
         .catch(() => { /* keep showing whatever was cached (or nothing) — never surface a fetch error here */ });
     };
@@ -202,7 +275,7 @@ export function useAirportForecast(code: string | undefined, days: number, start
       cancelled = true;
       if (typeof window !== 'undefined') window.removeEventListener('online', onOnline);
     };
-  }, [code, days, startDate]);
+  }, [code, forecastWindow.days, forecastWindow.startDate]);
 
   return forecast;
 }
@@ -214,10 +287,12 @@ export function useAirportForecast(code: string | undefined, days: number, start
  */
 export function prefetchStationWeather(requests: { code: string; days: number; startDate?: string }[]): void {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-  for (const { code, days, startDate } of requests) {
+  for (const request of requests) {
+    const { code } = request;
+    const forecastWindow = resolveLayoverWindow(code, request.days, request.startDate);
     const cachedWeather = weatherCache.get(code);
     if (!cachedWeather || Date.now() - cachedWeather.fetchedAt >= STALE_AFTER_MS) fetchAirportWeather(code).catch(() => {});
-    const cached = cachedForecast(code, days, startDate);
-    if (!cached || Date.now() - cached.fetchedAt >= STALE_AFTER_MS) fetchAirportForecast(code, days, startDate).catch(() => {});
+    const cached = cachedForecast(code, forecastWindow.days, forecastWindow.startDate);
+    if (!cached || Date.now() - cached.fetchedAt >= STALE_AFTER_MS) fetchAirportForecast(code, forecastWindow.days, forecastWindow.startDate).catch(() => {});
   }
 }
