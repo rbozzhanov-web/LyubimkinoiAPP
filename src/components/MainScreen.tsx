@@ -795,9 +795,12 @@ function WeatherChip({ code, palette }: { code: string; palette: Palette }) {
         ? <View style={styles.forecastList}>
             {forecast.map((day) => {
               const conditions = weatherIcon(day.weatherCode, true);
-              return <Text key={day.date} numberOfLines={1} style={[styles.meta, styles.forecastLine, { color: palette.text }]}>
-                {forecastDayLabel(day.date)} {conditions.icon} {conditions.label} · {day.tempMax}°/{day.tempMin}°
-              </Text>;
+              return <View key={day.date} style={styles.forecastLine}>
+                <Text style={[styles.meta, styles.forecastDay, { color: palette.muted }]}>{forecastDayLabel(day.date)}</Text>
+                <Text style={styles.weatherIcon}>{conditions.icon}</Text>
+                <Text numberOfLines={1} style={[styles.meta, styles.forecastLabel, { color: palette.text }]}>{conditions.label}</Text>
+                <Text style={[styles.meta, styles.forecastTemp, { color: palette.text }]}>{day.tempMax}°/{day.tempMin}°</Text>
+              </View>;
             })}
           </View>
         : <Text style={[styles.meta, { color: palette.muted, marginTop: 6 }]}>Forecast unavailable offline.</Text>}
@@ -832,7 +835,7 @@ const styles = StyleSheet.create({
   timeLabel: { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: .3 }, timeValue: { fontSize: 22, lineHeight: 27, fontWeight: '700', marginTop: 3, fontVariant: ['tabular-nums'] },
   heroFoot: { fontSize: 13, fontWeight: '600', marginTop: 14 },
   weatherRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }, weatherIcon: { fontSize: 16 }, weatherTemp: { fontSize: 14, fontWeight: '800' }, weatherMeta: { flex: 1, fontSize: 11.5, fontWeight: '600' },
-  forecastPopup: { width: '88%', maxWidth: 340, borderWidth: 1, borderRadius: 22, padding: 18 }, forecastList: { marginTop: 10, gap: 6 }, forecastLine: { fontWeight: '600', fontVariant: ['tabular-nums'] },
+  forecastPopup: { width: '88%', maxWidth: 340, borderWidth: 1, borderRadius: 22, padding: 18 }, forecastList: { marginTop: 10, gap: 6 }, forecastLine: { flexDirection: 'row', alignItems: 'center', gap: 8 }, forecastDay: { width: 42, fontWeight: '700' }, forecastLabel: { flex: 1 }, forecastTemp: { fontWeight: '700', fontVariant: ['tabular-nums'] },
   summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14 }, summaryValue: { fontSize: 28, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] },
   upNext: { flex: 1, minHeight: 0, gap: 2 }, upNextList: { flex: 1 }, upNextRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
   upNextDate: { fontSize: 12, fontWeight: '700', letterSpacing: .4, width: 54 }, upNextRoute: { flex: 1, fontSize: 15, fontWeight: '600' }, upNextTimeBlock: { minWidth: 72, alignItems: 'flex-end' }, upNextTimeLabel: { fontSize: 8, lineHeight: 10, fontWeight: '700', letterSpacing: .45, marginBottom: 1 }, upNextTime: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
