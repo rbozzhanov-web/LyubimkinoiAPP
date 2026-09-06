@@ -139,12 +139,15 @@ export default function MainScreen() {
     const now = Date.now();
     const upcoming = timedDuties(allDuties).filter((item) => item.releaseMs >= now).slice(0, 6);
     const seen = new Set<string>();
-    const requests: { code: string; days: number }[] = [];
+    const requests: { code: string; days: number; startDate?: string }[] = [];
     for (const item of upcoming) {
       const last = item.duty.sectors[item.duty.sectors.length - 1];
-      if (!last || seen.has(last.arrival)) continue;
-      seen.add(last.arrival);
-      requests.push({ code: last.arrival, days: FORECAST_DAYS });
+      if (!last) continue;
+      const startDate = arrivalForecastDate(item.duty);
+      const requestKey = `${last.arrival}:${startDate ?? ''}`;
+      if (seen.has(requestKey)) continue;
+      seen.add(requestKey);
+      requests.push({ code: last.arrival, days: FORECAST_DAYS, startDate });
     }
     if (requests.length) prefetchStationWeather(requests);
   }, [allDuties]);
@@ -383,6 +386,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
 
   const first = duty.sectors[0];
   const last = duty.sectors[duty.sectors.length - 1];
+  const forecastDate = arrivalForecastDate(duty);
   const reportMs = focus?.reportMs;
   const releaseMs = focus?.releaseMs;
   const isUpcoming = reportMs !== undefined && reportMs > now;
@@ -433,7 +437,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
         <Text style={[styles.heroFoot, { color: palette.muted }]}>
           {dutyMinutes !== undefined ? `Duty ${formatMinutes(dutyMinutes)} · ` : ''}{duty.sectors.length} sector{duty.sectors.length === 1 ? '' : 's'}
         </Text>
-        <WeatherChip code={last.arrival} palette={palette} />
+        <WeatherChip code={last.arrival} targetDate={forecastDate} palette={palette} />
       </Pressable>
     </Animated.View>
 
@@ -458,7 +462,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
           </View>
         </View>} />
     </View>}
-    {crewOpen && <FlightDetail sectors={duty.sectors} dateLabel={duty.dateLabel} palette={palette} onClose={() => setCrewOpen(false)} />}
+    {crewOpen && <FlightDetail sectors={duty.sectors} dateLabel={duty.dateLabel} forecastDate={forecastDate} palette={palette} onClose={() => setCrewOpen(false)} />}
   </View>;
 }
 
@@ -677,7 +681,7 @@ function MoreScreen({ rosters, profile, palette, onDeleteRoster, onProfileChange
   </View>;
 }
 
-function FlightDetail({ sectors, dateLabel, palette, onClose, onPrevious, onNext }: { sectors: Sector[]; dateLabel: string; palette: Palette; onClose: () => void; onPrevious?: () => void; onNext?: () => void }) {
+function FlightDetail({ sectors, dateLabel, forecastDate, palette, onClose, onPrevious, onNext }: { sectors: Sector[]; dateLabel: string; forecastDate?: string; palette: Palette; onClose: () => void; onPrevious?: () => void; onNext?: () => void }) {
   const [scrollAtTop, setScrollAtTop] = useState(true);
   const first = sectors[0]!;
   const last = sectors.at(-1)!;
@@ -693,7 +697,7 @@ function FlightDetail({ sectors, dateLabel, palette, onClose, onPrevious, onNext
     style={[styles.flightSheet, palette.sheetGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
   >
     <SwipeSurface style={styles.flightSheetContent} onSwipeLeft={onNext} onSwipeRight={onPrevious} threshold={44}>
-      <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sectors.map((sector) => sector.flightNumber).join(' · ')}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sectorRoute(sectors)}</Text><Text style={[styles.meta, { color: palette.muted }]}>{first.departureTime} – {last.arrivalTime}</Text><WeatherChip code={last.arrival} palette={palette} /></View></View>
+      <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sectors.map((sector) => sector.flightNumber).join(' · ')}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sectorRoute(sectors)}</Text><Text style={[styles.meta, { color: palette.muted }]}>{first.departureTime} – {last.arrivalTime}</Text><WeatherChip code={last.arrival} targetDate={forecastDate} palette={palette} /></View></View>
       <Text style={[styles.swipeHint, { color: palette.muted }]}>{onPrevious ? '‹ ' : ''}swipe flight{onNext ? ' ›' : ''} · swipe down to close</Text>
       <Text style={[styles.flyingWith, { color: palette.accent }]}>{sectors.length > 1 ? `${sectors.length} flights · ` : ''}Flying with · {crewCount}</Text>
       <FlatList
@@ -769,28 +773,41 @@ function dateMetaFor(isoDate: string | undefined, dateLabel: string): { label: s
   return { label: `${dateLabel} · ${weekday}`, weekend: weekdayIndex === 0 || weekdayIndex === 6 };
 }
 function routeChain(duty: Duty): string { return sectorRoute(duty.sectors); }
+function arrivalForecastDate(duty: Duty): string | undefined {
+  const last = duty.sectors.at(-1);
+  return duty.releaseDate ?? last?.date ?? duty.date;
+}
 function TimeCell({ label, value, palette }: { label: string; value: string; palette: Palette }) { return <View style={styles.timeCell}><Text numberOfLines={1} style={[styles.timeLabel, { color: palette.muted }]}>{label}</Text><Text style={[styles.timeValue, { color: palette.text }]}>{value}</Text></View>; }
-function WeatherChip({ code, palette }: { code: string; palette: Palette }) {
+function WeatherChip({ code, targetDate, palette }: { code: string; targetDate?: string; palette: Palette }) {
   const weather = useAirportWeather(code);
-  const forecast = useAirportForecast(code, FORECAST_DAYS);
+  const forecast = useAirportForecast(code, FORECAST_DAYS, targetDate);
   const [open, setOpen] = useState(false);
   // Gate on whether the station is one we can ever show weather for, not on whether data
   // happens to be cached yet — a known airport with no cache (a true first-ever offline
   // visit) still shows the row with a fallback, rather than vanishing outright.
   if (!airportCoords(code)) return null;
-  const conditions = weather ? weatherIcon(weather.weatherCode, weather.isDay) : undefined;
+  const currentConditions = weather ? weatherIcon(weather.weatherCode, weather.isDay) : undefined;
+  const futureTarget = Boolean(targetDate && targetDate > localTodayIso());
+  const targetForecast = targetDate ? forecast?.find((day) => day.date === targetDate) : undefined;
+  const targetConditions = targetForecast ? weatherIcon(targetForecast.weatherCode, true) : undefined;
   return <>
     <Pressable onPress={() => setOpen(true)} accessibilityRole="button" accessibilityLabel={`Weather forecast at ${code}`} style={styles.weatherRow}>
-      <Text style={styles.weatherIcon}>{conditions?.icon ?? '✈︎'}</Text>
-      {weather ? <>
-        <Text style={[styles.weatherTemp, { color: palette.text }]}>{weather.temp}°</Text>
-        <Text numberOfLines={1} style={[styles.weatherMeta, { color: palette.muted }]}>{code} · {conditions!.label} · {windDirectionLabel(weather.windDeg)} {weather.windSpeed}kt · {weather.pressure}hPa</Text>
-      </> : (
-        <Text numberOfLines={1} style={[styles.weatherMeta, { color: palette.muted }]}>{code} · Weather unavailable offline</Text>
-      )}
+      {futureTarget ? <>
+        <Text style={styles.weatherIcon}>{targetConditions?.icon ?? '✈︎'}</Text>
+        {targetForecast && <Text style={[styles.weatherTemp, { color: palette.text }]}>{targetForecast.tempMax}°/{targetForecast.tempMin}°</Text>}
+        <Text numberOfLines={1} style={[styles.weatherMeta, { color: palette.muted }]}>{code} · {targetDate ? forecastDayLabel(targetDate) : ''}{targetConditions ? ` · ${targetConditions.label}` : ' · Forecast unavailable'}</Text>
+      </> : <>
+        <Text style={styles.weatherIcon}>{currentConditions?.icon ?? '✈︎'}</Text>
+        {weather ? <>
+          <Text style={[styles.weatherTemp, { color: palette.text }]}>{weather.temp}°</Text>
+          <Text numberOfLines={1} style={[styles.weatherMeta, { color: palette.muted }]}>{code} · {currentConditions!.label} · {windDirectionLabel(weather.windDeg)} {weather.windSpeed}kt · {weather.pressure}hPa</Text>
+        </> : (
+          <Text numberOfLines={1} style={[styles.weatherMeta, { color: palette.muted }]}>{code} · Weather unavailable offline</Text>
+        )}
+      </>}
     </Pressable>
     <IOSDialog visible={open} onClose={() => setOpen(false)} style={[styles.forecastPopup, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
-      <Text style={[styles.label, { color: palette.muted }]}>FORECAST · {code}</Text>
+      <Text style={[styles.label, { color: palette.muted }]}>FORECAST · {code}{targetDate ? ` · FROM ${forecastDayLabel(targetDate)}` : ''}</Text>
       {forecast && forecast.length > 0
         ? <View style={styles.forecastList}>
             {forecast.map((day) => {
