@@ -63,7 +63,7 @@ const REGISTER_SW = `
       const UPDATE_TITLE_SPECIAL = 'Lyubimkina there is a new version available for you';
       const UPDATE_TITLE_NORMAL = 'A new version of KhaVair is available.';
       // Keep this short and update it with each published version.
-      const UPDATE_NOTICE = 'Weather now covers major airports and forecast dates follow the full layover period.';
+      const UPDATE_NOTICE = 'Weather in flight details now follows the layover station, with clear loading, retry and offline states.';
 
       const specialModeActive = () => {
         try {
