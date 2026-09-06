@@ -598,7 +598,7 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
         }} />
     </View>}
 
-    {selectedRow && <FlightDetail sectors={selectedRow.sectors} dateLabel={selectedRow.duty.dateLabel} weatherCode={detailWeatherStation(selectedRow, roster?.subject?.base)} forecastDate={selectedRow.duty.date} palette={palette} onClose={() => onSelect(undefined)} onPrevious={selectedIndex > 0 ? () => onSelect(flights[selectedIndex - 1].sectors[0]!.id) : undefined} onNext={selectedIndex < flights.length - 1 ? () => onSelect(flights[selectedIndex + 1].sectors[0]!.id) : undefined} />}
+    {selectedRow && <FlightDetail sectors={selectedRow.sectors} dateLabel={selectedRow.duty.dateLabel} weatherCode={selectedRow.sectors.at(-1)?.arrival} forecastDate={arrivalForecastDate(selectedRow.duty)} palette={palette} onClose={() => onSelect(undefined)} onPrevious={selectedIndex > 0 ? () => onSelect(flights[selectedIndex - 1].sectors[0]!.id) : undefined} onNext={selectedIndex < flights.length - 1 ? () => onSelect(flights[selectedIndex + 1].sectors[0]!.id) : undefined} />}
   </View>;
 }
 
@@ -775,13 +775,6 @@ function routeChain(duty: Duty): string { return sectorRoute(duty.sectors); }
 function arrivalForecastDate(duty: Duty): string | undefined {
   const last = duty.sectors.at(-1);
   return duty.releaseDate ?? last?.date ?? duty.date;
-}
-function detailWeatherStation(card: FlightCardGroup, base?: string): string {
-  const first = card.sectors[0];
-  const last = card.sectors.at(-1);
-  if (!first || !last) return base ?? '';
-  const normalizedBase = base?.trim().toUpperCase();
-  return normalizedBase && first.departure.trim().toUpperCase() !== normalizedBase ? first.departure : last.arrival;
 }
 function TimeCell({ label, value, palette }: { label: string; value: string; palette: Palette }) { return <View style={styles.timeCell}><Text numberOfLines={1} style={[styles.timeLabel, { color: palette.muted }]}>{label}</Text><Text style={[styles.timeValue, { color: palette.text }]}>{value}</Text></View>; }
 function WeatherChip({ code, targetDate, palette }: { code: string; targetDate?: string; palette: Palette }) {

@@ -83,11 +83,14 @@ function sectorArrivalDate(sector: { date: string; arrivalDate?: string; timeOut
 }
 
 function resolveLayoverWindow(code: string, requestedDays: number, startDateHint?: string): ForecastWindow {
-  const fallback = { startDate: validIsoDate(startDateHint) ? startDateHint : undefined, days: normalizedDays(requestedDays) };
+  const fallbackStart = validIsoDate(startDateHint) ? startDateHint : undefined;
+  const fallback = { startDate: fallbackStart, days: normalizedDays(requestedDays) };
+  const target = code.trim().toUpperCase();
+  // ALA is the crew base, so an arrival there is not treated as a layover forecast.
+  if (target === 'ALA') return { startDate: fallbackStart, days: 1 };
   if (typeof localStorage === 'undefined') return fallback;
 
   try {
-    const target = code.trim().toUpperCase();
     const sectors = loadStoredRosters()
       .flatMap((roster) => [...roster.sectors, ...(roster.boundarySectors ?? [])])
       .filter((sector) => validIsoDate(sector.date))
@@ -96,14 +99,14 @@ function resolveLayoverWindow(code: string, requestedDays: number, startDateHint
     const arrivals = sectors
       .map((sector) => ({ sector, arrivalDate: sectorArrivalDate(sector) }))
       .filter((item) => item.sector.arrivalAirport?.trim().toUpperCase() === target);
-    if (!arrivals.length) return fallback;
+    if (!arrivals.length) return { startDate: fallbackStart, days: 1 };
 
     const hintedDay = validIsoDate(startDateHint) ? isoDayNumber(startDateHint) : undefined;
     const arrival = [...arrivals].sort((a, b) => {
       if (hintedDay === undefined) return b.arrivalDate.localeCompare(a.arrivalDate);
       return Math.abs(isoDayNumber(a.arrivalDate) - hintedDay) - Math.abs(isoDayNumber(b.arrivalDate) - hintedDay);
     })[0];
-    if (!arrival) return fallback;
+    if (!arrival) return { startDate: fallbackStart, days: 1 };
 
     const arrivalMoment = `${arrival.arrivalDate}T${arrival.sector.timeIn || '00:00'}`;
     const nextDeparture = sectors.find((sector) =>
@@ -111,14 +114,14 @@ function resolveLayoverWindow(code: string, requestedDays: number, startDateHint
       sector.departureAirport?.trim().toUpperCase() === target &&
       `${sector.date}T${sector.timeOut || '00:00'}` > arrivalMoment
     );
-    if (!nextDeparture) return { startDate: arrival.arrivalDate, days: fallback.days };
+    if (!nextDeparture) return { startDate: arrival.arrivalDate, days: 1 };
 
     return {
       startDate: arrival.arrivalDate,
       days: normalizedDays(inclusiveIsoDays(arrival.arrivalDate, nextDeparture.date)),
     };
   } catch {
-    return fallback;
+    return { startDate: fallbackStart, days: 1 };
   }
 }
 
