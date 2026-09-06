@@ -781,6 +781,12 @@ function WeatherChip({ code, targetDate, palette }: { code: string; targetDate?:
   const weather = useAirportWeather(code);
   const { forecast, status: forecastStatus, startDate: forecastStartDate, retry } = useAirportForecastState(code, FORECAST_DAYS, targetDate);
   const [open, setOpen] = useState(false);
+  // This component instance persists across a flight-detail swipe (no `key` on
+  // FlightDetail/WeatherChip ties them to the selected flight) and across Home's own
+  // duty-focus flipping as time passes, so `code`/`targetDate` can change under an
+  // already-open popup. Close it instead of silently relabeling itself for a station or
+  // date the viewer never asked to see.
+  useEffect(() => setOpen(false), [code, targetDate]);
   // Gate on whether the station is one we can ever show weather for, not on whether data
   // happens to be cached yet — a known airport with no cache still shows the row with a
   // fallback, rather than vanishing outright.
