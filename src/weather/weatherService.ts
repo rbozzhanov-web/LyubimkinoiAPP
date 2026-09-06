@@ -14,6 +14,8 @@ export type AirportWeather = {
 };
 
 export type ForecastDay = { date: string; weatherCode: number; tempMax: number; tempMin: number };
+export type ForecastLoadStatus = 'loading' | 'ready' | 'offline' | 'error';
+export type AirportForecastState = { forecast?: ForecastDay[]; status: ForecastLoadStatus; startDate?: string; retry: () => void };
 type AirportForecast = { code: string; days: ForecastDay[]; fetchedAt: number; startDate?: string };
 type ForecastWindow = { startDate?: string; days: number };
 
@@ -40,8 +42,6 @@ function makeCache<T extends { fetchedAt: number }>(storageKey: string) {
   };
 }
 
-// Same key as before this cache helper was generalized — do not change it, or every
-// device's already-accumulated weather cache is silently discarded.
 const weatherCache = makeCache<AirportWeather>('khavair.weather.v1');
 const forecastCache = makeCache<AirportForecast>('khavair.forecast.v1');
 
@@ -82,12 +82,6 @@ function sectorArrivalDate(sector: { date: string; arrivalDate?: string; timeOut
   return out !== undefined && arrival !== undefined && arrival < out ? addIsoDays(sector.date, 1) : sector.date;
 }
 
-/**
- * Resolve the weather window from the actual stay at the destination: arrival day through
- * the calendar day of the next duty that departs from the same station. The caller's
- * startDate is only a hint used to choose the matching arrival; it is not treated as the
- * layover end. This keeps the popup aligned to the roster's real layover period.
- */
 function resolveLayoverWindow(code: string, requestedDays: number, startDateHint?: string): ForecastWindow {
   const fallback = { startDate: validIsoDate(startDateHint) ? startDateHint : undefined, days: normalizedDays(requestedDays) };
   if (typeof localStorage === 'undefined') return fallback;
@@ -147,8 +141,6 @@ function selectForecastDays(days: ForecastDay[], requestedDays: number, startDat
 function cachedForecast(code: string, days: number, startDate?: string): AirportForecast | undefined {
   const exact = forecastCache.get(forecastCacheKey(code, startDate));
   if (exact && selectForecastDays(exact.days, days, startDate)) return exact;
-  // Compatibility with the original per-airport cache: if its date range already contains
-  // the requested layover start, reuse it immediately instead of throwing away a good cache.
   if (validIsoDate(startDate)) {
     const legacy = forecastCache.get(code);
     if (legacy && selectForecastDays(legacy.days, days, startDate)) return legacy;
@@ -202,12 +194,6 @@ async function fetchAirportForecast(code: string, days: number, startDate?: stri
   return result;
 }
 
-/**
- * Always renders whatever is cached immediately — no loading state blocks the first
- * paint. A background refresh only ever fires when the cache is stale AND the
- * browser reports it's online; offline (or a fresh cache) is a pure no-op, so
- * going offline never triggers a retry loop or a delay — just the last known reading.
- */
 export function useAirportWeather(code: string | undefined): AirportWeather | undefined {
   const [weather, setWeather] = useState<AirportWeather | undefined>(() => (code ? weatherCache.get(code) : undefined));
 
@@ -222,7 +208,7 @@ export function useAirportWeather(code: string | undefined): AirportWeather | un
       if (cached && Date.now() - cached.fetchedAt < STALE_AFTER_MS) return;
       fetchAirportWeather(code)
         .then((fresh) => { if (fresh && !cancelled) setWeather(fresh); })
-        .catch(() => { /* keep showing whatever was cached (or nothing) — never surface a fetch error here */ });
+        .catch(() => {});
     };
 
     refreshIfStale();
@@ -237,54 +223,79 @@ export function useAirportWeather(code: string | undefined): AirportWeather | un
   return weather;
 }
 
-/**
- * Same immediate-cache/background-refresh shape as useAirportWeather, for the daily
- * forecast. The requested date is resolved against the stored roster so the returned
- * range spans the actual layover, from arrival through the next departure day.
- */
-export function useAirportForecast(code: string | undefined, days: number, startDate?: string): ForecastDay[] | undefined {
+export function useAirportForecastState(code: string | undefined, days: number, startDate?: string): AirportForecastState {
   const forecastWindow = code ? resolveLayoverWindow(code, days, startDate) : { startDate, days: normalizedDays(days) };
   const readCached = () => {
     if (!code) return undefined;
     const cached = cachedForecast(code, forecastWindow.days, forecastWindow.startDate);
     return cached ? selectForecastDays(cached.days, forecastWindow.days, forecastWindow.startDate) : undefined;
   };
-  const [forecast, setForecast] = useState<ForecastDay[] | undefined>(readCached);
+  const initialForecast = readCached();
+  const [forecast, setForecast] = useState<ForecastDay[] | undefined>(initialForecast);
+  const [status, setStatus] = useState<ForecastLoadStatus>(() => initialForecast ? 'ready' : (typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'loading'));
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
-    setForecast(readCached());
-    if (!code) return;
+    const cachedNow = readCached();
+    setForecast(cachedNow);
+    if (!code) { setStatus('error'); return; }
 
     let cancelled = false;
-    const refreshIfStale = () => {
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    const refreshIfStale = (force = false) => {
+      const online = typeof navigator === 'undefined' || navigator.onLine !== false;
       const cached = cachedForecast(code, forecastWindow.days, forecastWindow.startDate);
-      if (cached && Date.now() - cached.fetchedAt < STALE_AFTER_MS) return;
+      const cachedDays = cached ? selectForecastDays(cached.days, forecastWindow.days, forecastWindow.startDate) : undefined;
+      if (cachedDays) {
+        setForecast(cachedDays);
+        if (!force && Date.now() - cached!.fetchedAt < STALE_AFTER_MS) {
+          setStatus('ready');
+          return;
+        }
+      }
+      if (!online) {
+        setStatus(cachedDays ? 'ready' : 'offline');
+        return;
+      }
+      setStatus(cachedDays ? 'ready' : 'loading');
       fetchAirportForecast(code, forecastWindow.days, forecastWindow.startDate)
         .then((fresh) => {
-          if (!fresh || cancelled) return;
-          setForecast(selectForecastDays(fresh, forecastWindow.days, forecastWindow.startDate));
+          if (cancelled) return;
+          const selected = fresh ? selectForecastDays(fresh, forecastWindow.days, forecastWindow.startDate) : undefined;
+          if (selected?.length) {
+            setForecast(selected);
+            setStatus('ready');
+          } else {
+            setStatus(cachedDays ? 'ready' : 'error');
+          }
         })
-        .catch(() => { /* keep showing whatever was cached (or nothing) — never surface a fetch error here */ });
+        .catch(() => {
+          if (!cancelled) setStatus(cachedDays ? 'ready' : 'error');
+        });
     };
 
-    refreshIfStale();
-    const onOnline = () => refreshIfStale();
-    if (typeof window !== 'undefined') window.addEventListener('online', onOnline);
+    refreshIfStale(retryToken > 0);
+    const onOnline = () => refreshIfStale(true);
+    const onOffline = () => { if (!readCached()) setStatus('offline'); };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', onOnline);
+      window.addEventListener('offline', onOffline);
+    }
     return () => {
       cancelled = true;
-      if (typeof window !== 'undefined') window.removeEventListener('online', onOnline);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', onOnline);
+        window.removeEventListener('offline', onOffline);
+      }
     };
-  }, [code, forecastWindow.days, forecastWindow.startDate]);
+  }, [code, forecastWindow.days, forecastWindow.startDate, retryToken]);
 
-  return forecast;
+  return { forecast, status, startDate: forecastWindow.startDate, retry: () => setRetryToken((value) => value + 1) };
 }
 
-/**
- * Fire-and-forget warm-up for stations the user is about to care about (upcoming duties'
- * arrival airports), so the chip and its forecast popup already have data by the time the
- * user opens them — not just whichever flight happens to be on screen right now.
- */
+export function useAirportForecast(code: string | undefined, days: number, startDate?: string): ForecastDay[] | undefined {
+  return useAirportForecastState(code, days, startDate).forecast;
+}
+
 export function prefetchStationWeather(requests: { code: string; days: number; startDate?: string }[]): void {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
   for (const request of requests) {
