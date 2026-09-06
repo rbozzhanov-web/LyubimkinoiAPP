@@ -111,10 +111,11 @@ function resolveLayoverWindow(code: string, requestedDays: number, startDateHint
     })[0];
     if (!arrival) return fallback;
 
+    const arrivalMoment = `${arrival.arrivalDate}T${arrival.sector.timeIn || '00:00'}`;
     const nextDeparture = sectors.find((sector) =>
       sector.dutyIndex !== arrival.sector.dutyIndex &&
       sector.departureAirport?.trim().toUpperCase() === target &&
-      sector.date >= arrival.arrivalDate
+      `${sector.date}T${sector.timeOut || '00:00'}` > arrivalMoment
     );
     if (!nextDeparture) return { startDate: arrival.arrivalDate, days: fallback.days };
 
