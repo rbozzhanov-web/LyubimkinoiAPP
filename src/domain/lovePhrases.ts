@@ -1,15 +1,17 @@
 /**
  * Curated, deterministic phrase pools for Special Mode's personal note on Home — short
  * messages written in Ramil's voice for Khava. Not an LLM-backed generator: every phrase
- * is hand-written ahead of time and picked from a pool, with a small recent-history buffer
- * so the same line doesn't repeat back-to-back. Selection is randomized within a pool, not
- * "creative generation" — the pools are the actual content.
+ * is hand-written ahead of time and picked from a shuffled per-context "bag" that empties
+ * before any repeat -- every line in a pool is shown once before that pool reshuffles for a
+ * new cycle. Selection is randomized within a pool, not "creative generation" — the pools
+ * are the actual content.
  *
  * `intimate` is a deliberately separate, rarer pool for the small handful of phrases that
  * lean adult. detectLoveContext() never returns it -- same treatment already given to
- * good_sleep/poor_sleep/high_readiness/low_readiness/away/reunion/day_off, which have no
- * honest automatic signal either. It only exists for a future opt-in surface to call
- * pickLovePhrase('intimate') directly; nothing today wires it into the automatic picker.
+ * good_sleep/poor_sleep/high_readiness/low_readiness/away/reunion/day_off/jealous_pride,
+ * which have no honest automatic signal either. It only exists for a future opt-in surface
+ * to call pickLovePhrase('intimate') directly; nothing today wires it into the automatic
+ * picker.
  */
 
 export type LoveContext =
@@ -29,6 +31,7 @@ export type LoveContext =
   | 'weather_hot'
   | 'weather_rain'
   | 'random'
+  | 'jealous_pride'
   | 'intimate';
 
 type Phrase = { id: string; text: string };
@@ -397,6 +400,35 @@ const PHRASES: Record<LoveContext, Phrase[]> = {
     'Каждый раз удивляюсь, как тебя можно любить ещё сильнее, чем вчера.',
     'Знаешь, что самое приятное? Что ты вообще есть в моей жизни.',
     'Хочется просто сказать: я по тебе скучаю сильнее, чем показываю.',
+    // pride in her work / missing sharing a crew — soft enough for the general rotation;
+    // the sharper jealousy lines live in the dedicated jealous_pride pool below
+    'Бизнес-класс сегодня не знает, как ему повезло.',
+    'Горжусь тобой каждый раз, когда думаю, где ты сейчас работаешь.',
+    'Жаль, что нас почти никогда не ставят в один экипаж.',
+    'Летаем в одном небе, а не вместе. Обидно, если честно.',
+    'Может, однажды нас всё-таки поставят в одну смену.',
+    'Ты в своём самолёте, я в своём — но мыслями я в твоём.',
+  ]),
+  // Dormant pool: pride in her looks and work, mixed with a light, self-aware jealousy that
+  // is entirely his own feeling, never a note about her behavior. Written for a captain who
+  // rarely shares a crew with her and knows exactly why business class stays fully booked.
+  // No honest automatic signal for "flying together today" exists anywhere in KhaVair's
+  // domain model (a duty's crew list has no notion of who "Khava" is), so this stays
+  // reachable only via a direct pickLovePhrase('jealous_pride') call, same as the other
+  // dormant pools above.
+  jealous_pride: pool('jealous_pride', [
+    'Знаю, что ты просто делаешь свою работу. Всё равно немного ревную.',
+    'Ревную тебя к целому бизнес-классу. Мелочь, но неприятно.',
+    'Моя любимка — лучшее, что случается с пассажирами сегодня. Ревную ко всем сразу.',
+    'Ревность моя — это просто любовь, которая плохо считает.',
+    'Как капитан — официально скучаю. Как Рамиль — ещё сильнее.',
+    'Обидно, что мы почти никогда не летаем одним экипажем.',
+    'Хочу хоть раз услышать твой голос по громкой связи не по громкой связи, а рядом.',
+    'Знаю, что ты им просто улыбаешься по работе. Знаю. Всё равно немного бесит.',
+    'Ты не виновата, что такая красивая в форме. Но мне от этого не легче.',
+    'Если бы расписание спрашивало меня — мы бы летали вместе каждую неделю.',
+    'Немного жаль весь бизнес-класс, который видит тебя чаще меня.',
+    'Ревновать к работе, которую сам же уважаю, — моя личная нелепость.',
   ]),
   // Rare, opt-in-only pool. Never returned by detectLoveContext(); reachable only via a
   // direct pickLovePhrase('intimate') call from some future opt-in surface. Sensual, not
@@ -419,41 +451,75 @@ const PHRASES: Record<LoveContext, Phrase[]> = {
   ]),
 };
 
-const HISTORY_KEY = 'khavair.lovePhrase.history.v1';
-// Roughly matches how many distinct phrases a viewer sees in normal daily use before the
-// buffer cycles -- big enough to keep things fresh, small enough that even the smaller
-// pools (weather_*) still surface real variety rather than getting stuck excluding most of
-// their own pool.
-const HISTORY_LIMIT = 20;
+// Per-context "bag" of ids not yet shown in the current cycle, plus the last id shown per
+// context (so a fresh cycle's first draw never repeats the previous cycle's last line).
+const BAG_KEY = 'khavair.lovePhrase.bag.v1';
+const LAST_SHOWN_KEY = 'khavair.lovePhrase.lastShown.v1';
 
-function loadHistory(): string[] {
-  if (typeof localStorage === 'undefined') return [];
+type IdMap = Partial<Record<LoveContext, string[]>>;
+type LastShownMap = Partial<Record<LoveContext, string>>;
+
+function loadJsonObject<T extends object>(key: string): T {
+  if (typeof localStorage === 'undefined') return {} as T;
   try {
-    const value = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
-    return Array.isArray(value) ? value.filter((id) => typeof id === 'string') : [];
+    const value = JSON.parse(localStorage.getItem(key) || '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : ({} as T);
   } catch {
-    return [];
+    return {} as T;
   }
 }
 
-function saveHistory(ids: string[]) {
+function saveJsonObject(key: string, value: object) {
   if (typeof localStorage === 'undefined') return;
-  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(ids)); } catch { /* storage full or unavailable — this session just won't remember */ }
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage full or unavailable — this session just won't remember */ }
 }
 
-/** Returns one phrase for the given context, avoiding whatever was shown most recently. */
+function shuffled(ids: string[]): string[] {
+  const copy = [...ids];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+/**
+ * Returns one phrase for the given context, drawn from a shuffled bag that empties before
+ * any repeat: every line in the pool is shown exactly once per cycle, in a random order,
+ * before the bag reshuffles for the next cycle. This holds per context regardless of how
+ * many other contexts get picked in between -- a small pool like weather_rain still gets a
+ * full, non-repeating tour of itself instead of racing a shared global buffer. The one seam
+ * that needs an explicit guard is the boundary between cycles, since a fresh shuffle could
+ * otherwise land the same line that just closed out the previous cycle right back at the
+ * front; that's the only case handled beyond a plain shuffle-and-draw.
+ */
 export function pickLovePhrase(context: LoveContext): string {
-  const candidates = PHRASES[context]?.length ? PHRASES[context] : PHRASES.random;
-  const history = loadHistory();
-  // If every line in a small pool (e.g. weather_cold) is already in recent history, fall
-  // back to the full pool rather than getting stuck with no candidates -- but even then,
-  // never allow the phrase shown immediately last to repeat back-to-back.
-  const fresh = candidates.filter((phrase) => !history.includes(phrase.id));
-  const notImmediatelyPrevious = candidates.filter((phrase) => phrase.id !== history[0]);
-  const pickFrom = fresh.length ? fresh : notImmediatelyPrevious.length ? notImmediatelyPrevious : candidates;
-  const choice = pickFrom[Math.floor(Math.random() * pickFrom.length)];
-  saveHistory([choice.id, ...history.filter((id) => id !== choice.id)].slice(0, HISTORY_LIMIT));
-  return choice.text;
+  const poolContext: LoveContext = PHRASES[context]?.length ? context : 'random';
+  const candidates = PHRASES[poolContext];
+  const validIds = new Set(candidates.map((phrase) => phrase.id));
+
+  const bags = loadJsonObject<IdMap>(BAG_KEY);
+  const lastShown = loadJsonObject<LastShownMap>(LAST_SHOWN_KEY);
+  const previousId = lastShown[poolContext];
+
+  // Ids from a stale bag (e.g. a phrase that got removed in an app update) are dropped
+  // rather than drawn; an empty result here also covers "no bag yet" and "cycle just ended".
+  let bag = (bags[poolContext] ?? []).filter((id) => validIds.has(id));
+  if (bag.length === 0) {
+    bag = shuffled(candidates.map((phrase) => phrase.id));
+    if (bag.length > 1 && bag[0] === previousId) {
+      const swapWith = 1 + Math.floor(Math.random() * (bag.length - 1));
+      [bag[0], bag[swapWith]] = [bag[swapWith], bag[0]];
+    }
+  }
+
+  const [chosenId, ...rest] = bag;
+  bags[poolContext] = rest;
+  saveJsonObject(BAG_KEY, bags);
+  lastShown[poolContext] = chosenId;
+  saveJsonObject(LAST_SHOWN_KEY, lastShown);
+
+  return candidates.find((phrase) => phrase.id === chosenId)!.text;
 }
 
 export type LoveContextInput = {
@@ -479,9 +545,10 @@ function isRainCode(code: number): boolean {
  * good_sleep/poor_sleep/high_readiness/low_readiness/away/reunion/day_off have no honest
  * signal anywhere in KhaVair today (no sleep tracking, no concept of Ramil's location) --
  * their phrase pools exist and are reachable via pickLovePhrase() directly, but this
- * detector deliberately never selects them rather than guessing. `intimate` is excluded
- * for a different reason: it's meant to stay rare and opt-in, not part of the automatic
- * rotation at all.
+ * detector deliberately never selects them rather than guessing. `jealous_pride` is the
+ * same story: a duty's crew list has no notion of who "Khava" is, so there's no honest way
+ * to detect "flying together today" vs. not. `intimate` is excluded for a different reason:
+ * it's meant to stay rare and opt-in, not part of the automatic rotation at all.
  */
 export function detectLoveContext(input: LoveContextInput): LoveContext {
   if (input.isActive) return 'during_duty';
