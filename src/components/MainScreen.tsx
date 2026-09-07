@@ -668,7 +668,12 @@ function MoreScreen({ rosters, roster, profile, palette, onDeleteRoster, onProfi
   const year = roster?.period.start.slice(0, 4);
   const yearRosters = year ? rosters.filter((item) => item.period.start.startsWith(`${year}-`)) : [];
 
-  return <View style={styles.screen}>
+  return <>
+    <ScrollView
+      style={styles.moreScroll}
+      contentContainerStyle={styles.moreScrollContent}
+      showsVerticalScrollIndicator={false}
+    >
     <Text style={[styles.sectionTitle, { color: palette.text }]}>More</Text>
     <Pressable onPress={() => { setRankDraft(profile.contractRank); setProfileOpen(true); }} style={[styles.settingsCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]} accessibilityRole="button" accessibilityLabel="Edit profile position">
       <View style={styles.grow}><Text style={[styles.cardTitle, { color: palette.text }]}>Profile</Text><Text style={[styles.meta, { color: palette.muted }]}>Position / rank · {profile.contractRank}</Text><Text style={[styles.meta, { color: palette.muted }]}>Display profile only · does not change pay rules</Text></View><Text style={[styles.chevron, { color: palette.accent }]}>›</Text>
@@ -701,6 +706,7 @@ function MoreScreen({ rosters, roster, profile, palette, onDeleteRoster, onProfi
 
     <InfoCard title="Privacy" palette={palette}><Text style={[styles.meta, { color: palette.muted }]}>Roster PDFs are parsed locally and the source PDF bytes are not stored. Crew lists, parsed roster data and salary settings stay on this device. Weather sends only an airport code to Open-Meteo — no roster or crew data.</Text></InfoCard>
     {rosters.length > 0 && <Pressable onPress={onErase} style={[styles.secondaryButton, { borderColor: palette.line }]}><Text style={[styles.secondaryText, { color: palette.text }]}>Erase local roster & pay data</Text></Pressable>}
+    </ScrollView>
 
     <Modal visible={profileOpen} transparent animationType="fade" onRequestClose={() => setProfileOpen(false)}>
       <View style={styles.modalBackdrop}>
@@ -730,7 +736,7 @@ function MoreScreen({ rosters, roster, profile, palette, onDeleteRoster, onProfi
         </View>
       </View>
     </Modal>
-  </View>;
+  </>;
 }
 
 function FlightDetail({ sectors, dateLabel, weatherCode, forecastDate, palette, onClose, onPrevious, onNext }: { sectors: Sector[]; dateLabel: string; weatherCode?: string; forecastDate?: string; palette: Palette; onClose: () => void; onPrevious?: () => void; onNext?: () => void }) {
@@ -971,7 +977,7 @@ const styles = StyleSheet.create({
   marqueeWrap: { overflow: 'hidden', alignItems: 'flex-start' }, marqueeRow: { flexDirection: 'row' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   modeButton: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }, modeGlyph: { fontSize: 19 }, modeGlyphPair: { fontSize: 13, letterSpacing: -3 },
-  viewport: { flex: 1, minHeight: 0 }, screen: { flex: 1, paddingTop: 8, gap: 12 }, grow: { flex: 1, minWidth: 0 },
+  viewport: { flex: 1, minHeight: 0 }, screen: { flex: 1, paddingTop: 8, gap: 12 }, moreScroll: { flex: 1, minHeight: 0 }, moreScrollContent: { paddingTop: 8, paddingBottom: 8, gap: 12 }, grow: { flex: 1, minWidth: 0 },
   sectionTitle: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.8 }, intro: { fontSize: 15, lineHeight: 22 }, label: { fontSize: 11, fontWeight: '700', letterSpacing: .9 }, meta: { fontSize: 13, lineHeight: 18 },
   heroCard: { borderWidth: 1, borderRadius: 26, padding: 16 },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
