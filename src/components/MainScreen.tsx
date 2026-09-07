@@ -444,7 +444,11 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onLovePhrase, onImp
   const dutyMinutes = spanMinutes !== undefined && spanMinutes > 0 ? spanMinutes : undefined;
 
   const neighbours = previousDuties(timeline, focus, now, 6);
-  const dutyStatusWord = countdown ? (isUpcoming ? 'TO REPORT' : 'ON DUTY') : 'LATEST DUTY';
+  const dutyStateLabel = isUpcoming ? 'NEXT DUTY' : isActive ? 'ON DUTY NOW' : 'LATEST DUTY';
+  const dutyStatusWord = isUpcoming ? 'TO REPORT' : 'ON DUTY';
+  const block = roster.totals.blockMinutes;
+  const night = roster.totals.nightMinutes;
+  const nightShare = block && night !== undefined ? Math.round((night / block) * 100) : undefined;
 
   return <View style={styles.screen}>
     <Animated.View style={{ transform: [{ scale: heroPressScale }] }}>
@@ -459,9 +463,9 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onLovePhrase, onImp
         <View style={styles.heroTopRow}>
           <ScrollableRouteText text={routeChain(duty)} textStyle={styles.heroRoute} color={palette.text} cardBackground={palette.surfaceStrong} />
           <View style={[styles.dutyPill, { backgroundColor: palette.accentSoft, borderColor: palette.line }]}>
+            <Text numberOfLines={1} style={[styles.dutyPillDate, { color: palette.muted }]}>{dutyStateLabel} · {duty.dateLabel}</Text>
             {countdown && <Text numberOfLines={1} style={[styles.dutyPillValue, { color: palette.text }]}>{countdown}</Text>}
-            <Text numberOfLines={1} style={[styles.dutyPillLabel, { color: isActive ? palette.accent : palette.muted }]}>{dutyStatusWord}</Text>
-            <Text numberOfLines={1} style={[styles.dutyPillDate, { color: palette.muted }]}>{duty.dateLabel}</Text>
+            {countdown && <Text numberOfLines={1} style={[styles.dutyPillLabel, { color: isActive ? palette.accent : palette.muted }]}>{dutyStatusWord}</Text>}
           </View>
         </View>
         <Text numberOfLines={1} style={[styles.heroFlight, { color: palette.muted }]}>{duty.sectors.map((sector) => sector.flightNumber).join(' · ')}</Text>
@@ -480,6 +484,12 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onLovePhrase, onImp
         <WeatherChip code={last.arrival} targetDate={forecastDate} palette={palette} />
       </Pressable>
     </Animated.View>
+
+    <Text style={[styles.label, { color: palette.muted }]}>{rosterMonthLabel(roster)}</Text>
+    <View style={styles.summaryRow}>
+      <Summary title="BLOCK HOURS" value={formatMinutes(block)} detail={`${operatingCount(roster)} sectors flown`} palette={palette} />
+      <Summary title="NIGHT HOURS" value={formatMinutes(night)} detail={nightShare === undefined ? 'reported by the roster' : `${nightShare}% of block time`} palette={palette} />
+    </View>
 
     {neighbours.length > 0 && <View style={styles.upNext}>
       <Text style={[styles.label, { color: palette.muted }]}>PREVIOUS FLIGHTS</Text>
@@ -657,9 +667,6 @@ function MoreScreen({ rosters, roster, profile, palette, onDeleteRoster, onProfi
 
   const year = roster?.period.start.slice(0, 4);
   const yearRosters = year ? rosters.filter((item) => item.period.start.startsWith(`${year}-`)) : [];
-  const block = roster?.totals.blockMinutes;
-  const night = roster?.totals.nightMinutes;
-  const nightShare = block && night !== undefined ? Math.round((night / block) * 100) : undefined;
 
   return <View style={styles.screen}>
     <Text style={[styles.sectionTitle, { color: palette.text }]}>More</Text>
@@ -667,16 +674,11 @@ function MoreScreen({ rosters, roster, profile, palette, onDeleteRoster, onProfi
       <View style={styles.grow}><Text style={[styles.cardTitle, { color: palette.text }]}>Profile</Text><Text style={[styles.meta, { color: palette.muted }]}>Position / rank · {profile.contractRank}</Text><Text style={[styles.meta, { color: palette.muted }]}>Display profile only · does not change pay rules</Text></View><Text style={[styles.chevron, { color: palette.accent }]}>›</Text>
     </Pressable>
 
-    {roster && <View style={[styles.libraryCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+    {yearRosters.length > 1 && <View style={[styles.libraryCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
       <Text style={[styles.cardTitle, { color: palette.text }]}>Flight hours</Text>
-      <Text style={[styles.meta, { color: palette.muted }]}>{rosterMonthLabel(roster)}</Text>
-      <View style={styles.summaryRow}>
-        <Summary title="BLOCK HOURS" value={formatMinutes(block ?? 0)} detail={`${operatingCount(roster)} sectors flown`} palette={palette} />
-        <Summary title="NIGHT HOURS" value={formatMinutes(night ?? 0)} detail={nightShare === undefined ? 'reported by the roster' : `${nightShare}% of block time`} palette={palette} />
-      </View>
-      {yearRosters.length > 1 && <Text style={[styles.meta, { color: palette.muted }]}>
+      <Text style={[styles.meta, { color: palette.muted }]}>
         {year} to date · {formatMinutes(sumReportedBlockMinutes(yearRosters))} block · {formatMinutes(sumReportedNightMinutes(yearRosters))} night · {yearRosters.length} months imported
-      </Text>}
+      </Text>
     </View>}
 
     <Pressable onPress={onSalarySettings} style={[styles.settingsCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}><View style={styles.grow}><Text style={[styles.cardTitle, { color: palette.text }]}>Salary settings</Text><Text style={[styles.meta, { color: palette.muted }]}>Optional customization for another crew member</Text></View><Text style={[styles.chevron, { color: palette.accent }]}>›</Text></Pressable>
@@ -932,7 +934,7 @@ const styles = StyleSheet.create({
   routeScrollWrap: { flex: 1, minWidth: 0, overflow: 'hidden' }, routeScroll: { flexGrow: 0 }, routeScrollContent: { flexGrow: 0 },
   routeFadeLeft: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 20 }, routeFadeRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 20 },
   heroFlight: { fontSize: 15.6, fontWeight: '600', marginTop: 6 },
-  dutyPill: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5, alignItems: 'center', minWidth: 0 }, dutyPillValue: { fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] }, dutyPillLabel: { fontSize: 9, fontWeight: '700', letterSpacing: .5, marginTop: 2 }, dutyPillDate: { fontSize: 9, fontWeight: '600', letterSpacing: .3, marginTop: 1 },
+  dutyPill: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5, alignItems: 'center', minWidth: 0 }, dutyPillDate: { fontSize: 9, fontWeight: '600', letterSpacing: .3 }, dutyPillValue: { fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'], marginTop: 2 }, dutyPillLabel: { fontSize: 9, fontWeight: '700', letterSpacing: .5, marginTop: 1 },
   timeDivider: { height: StyleSheet.hairlineWidth, marginVertical: 12 },
   timeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 }, timeCell: { flex: 1, minWidth: 0 },
   timeLabel: { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: .3 }, timeValue: { fontSize: 22, lineHeight: 27, fontWeight: '700', marginTop: 3, fontVariant: ['tabular-nums'] },
