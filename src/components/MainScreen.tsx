@@ -392,7 +392,19 @@ function Home({ allDuties, fallbackRoster, rosters, palette, lovedMode, onImport
     releaseMs: focus?.releaseMs,
     arrivalTemp: arrivalWeather?.temp,
   }), [now, focus, arrivalWeather?.temp]);
-  const [lovePhrase] = useState(() => pickLovePhrase(loveContext));
+  // Picked once per mount, but only once real duty data exists -- MainScreen loads rosters
+  // asynchronously, so Home's very first render (right when the app opens, before that
+  // load resolves) always has no duty yet. A useState lazy initializer here would lock in
+  // that empty, context-less state for the rest of the mount and never correct itself once
+  // the real duty arrives a moment later -- exactly wrong, since app-open is the one moment
+  // this note matters most.
+  const [lovePhrase, setLovePhrase] = useState<string>();
+  const lovePhrasePicked = useRef(false);
+  useEffect(() => {
+    if (lovePhrasePicked.current || !duty) return;
+    lovePhrasePicked.current = true;
+    setLovePhrase(pickLovePhrase(loveContext));
+  }, [duty, loveContext]);
 
   if (!roster || !duty) return <View style={styles.screen}>
     <Text style={[styles.sectionTitle, { color: palette.text }]}>Your roster, simplified.</Text>
@@ -457,7 +469,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, lovedMode, onImport
       </Pressable>
     </Animated.View>
 
-    {lovedMode && <Text style={[styles.loveNote, { color: palette.rose }]}>{lovePhrase}</Text>}
+    {lovedMode && lovePhrase && <Text style={[styles.loveNote, { color: palette.rose }]}>{lovePhrase}</Text>}
 
     <Text style={[styles.label, { color: palette.muted }]}>{rosterMonthLabel(roster)}</Text>
     <View style={styles.summaryRow}>
