@@ -391,7 +391,8 @@ function Home({ allDuties, fallbackRoster, rosters, palette, lovedMode, onImport
     reportMs: focus?.reportMs,
     releaseMs: focus?.releaseMs,
     arrivalTemp: arrivalWeather?.temp,
-  }), [now, focus, arrivalWeather?.temp]);
+    arrivalWeatherCode: arrivalWeather?.weatherCode,
+  }), [now, focus, arrivalWeather?.temp, arrivalWeather?.weatherCode]);
   // Picked once per mount, but only once real duty data exists -- MainScreen loads rosters
   // asynchronously, so Home's very first render (right when the app opens, before that
   // load resolves) always has no duty yet. A useState lazy initializer here would lock in
@@ -400,11 +401,23 @@ function Home({ allDuties, fallbackRoster, rosters, palette, lovedMode, onImport
   // this note matters most.
   const [lovePhrase, setLovePhrase] = useState<string>();
   const lovePhrasePicked = useRef(false);
+  // useAirportWeather's own cache read settles one render after `duty` (and the arrival
+  // code derived from it) first becomes available -- picking immediately on that same
+  // render would read arrivalTemp/arrivalWeatherCode while they're still momentarily
+  // undefined, silently skipping weather_cold/weather_hot/weather_rain even when a cached
+  // reading already exists. dutyReady defers the actual pick by exactly one extra render so
+  // both signals have settled together, without changing anything about the "pick once"
+  // rule. This only helps when the weather cache is already warm (the common case, thanks
+  // to prefetchStationWeather) -- a genuinely cold cache needs a real network round trip no
+  // render-timing fix can shorten, so that case still falls through to time-of-day/random,
+  // same as it always has for weather_cold/weather_hot.
+  const [dutyReady, setDutyReady] = useState(false);
+  useEffect(() => { if (duty) setDutyReady(true); }, [duty]);
   useEffect(() => {
-    if (lovePhrasePicked.current || !duty) return;
+    if (lovePhrasePicked.current || !dutyReady) return;
     lovePhrasePicked.current = true;
     setLovePhrase(pickLovePhrase(loveContext));
-  }, [duty, loveContext]);
+  }, [dutyReady, loveContext]);
 
   if (!roster || !duty) return <View style={styles.screen}>
     <Text style={[styles.sectionTitle, { color: palette.text }]}>Your roster, simplified.</Text>
