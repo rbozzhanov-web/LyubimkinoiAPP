@@ -63,7 +63,7 @@ const REGISTER_SW = `
       const UPDATE_TITLE_SPECIAL = 'Lyubimkina there is a new version available for you';
       const UPDATE_TITLE_NORMAL = 'A new version of KhaVair is available.';
       // Keep this short and update it with each published version.
-      const UPDATE_NOTICE = 'Fixed: the weather forecast popup now closes itself instead of showing a stale airport if left open across a flight change.';
+      const UPDATE_NOTICE = 'Faster loading: the app now opens instantly from cache every time, even offline or on a weak signal, instead of waiting on the network first.';
 
       const specialModeActive = () => {
         try {

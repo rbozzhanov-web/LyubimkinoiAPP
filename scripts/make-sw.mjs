@@ -49,6 +49,21 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Cache-first for navigation: the cached shell answers immediately on every launch,
+// regardless of network conditions, while a fetch runs alongside to refresh the cache for
+// the NEXT launch. Previously this awaited fetch(request) with no timeout before ever
+// trying the cache -- a weak signal or a captive portal that never quite answers could
+// block the app from appearing at all, even with a perfectly good cached copy on hand.
+function freshShell(request) {
+  const revalidate = fetch(request)
+    .then((response) => {
+      if (response.ok) caches.open(CACHE).then((cache) => cache.put('./index.html', response.clone()));
+      return response;
+    })
+    .catch(() => null);
+  return caches.match('./index.html').then((cached) => cached || revalidate.then((response) => response || caches.match('./index.html')));
+}
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') return;
@@ -56,15 +71,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin || (url.protocol !== 'http:' && url.protocol !== 'https:')) return;
 
   if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put(request, copy));
-          return response;
-        })
-        .catch(async () => (await caches.match(request)) || (await caches.match('./index.html')) || (await caches.match('./'))),
-    );
+    event.respondWith(freshShell(request));
     return;
   }
 
