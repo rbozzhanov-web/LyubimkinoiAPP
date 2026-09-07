@@ -9,6 +9,7 @@ import { softHaptic } from './haptics';
 import { exportRosterCalendar } from '@/src/domain/calendar';
 import type { Duty, GroundEvent, Sector } from '@/src/domain/types';
 import { verifyLovedModeCode } from '@/src/domain/lovedMode';
+import { detectLoveContext, pickLovePhrase } from '@/src/domain/lovePhrases';
 import { DEFAULT_PROFILE, type CrewProfile } from '@/src/domain/profile';
 import { sumReportedBlockMinutes, sumReportedNightMinutes } from '@/src/domain/layovers';
 import { formatMinutes, rosterMonthLabel, rosterToDuties, rosterToFlightCardGroups, rosterToGroundEvents, sectorRoute, type FlightCardGroup } from '@/src/domain/rosterView';
@@ -310,7 +311,7 @@ export default function MainScreen() {
       </View>
 
       <SwipeSurface ref={tabSwipeRef} style={styles.viewport} onSwipeLeft={tab === 'More' ? undefined : () => changeTab(1)} onSwipeRight={tab === 'Home' ? undefined : () => changeTab(-1)}>
-        {tab === 'Home' && <Home allDuties={allDuties} fallbackRoster={roster} rosters={rosters} palette={palette} onImport={importRoster} importing={importing} />}
+        {tab === 'Home' && <Home allDuties={allDuties} fallbackRoster={roster} rosters={rosters} palette={palette} lovedMode={lovedMode} onImport={importRoster} importing={importing} />}
         {tab === 'Roster' && <RosterScreen roster={roster} rosters={rosters} duties={duties} selectedSector={selectedSector} palette={palette} profile={crewProfile} importing={importing} error={importError} onImport={importRoster} onSelect={setSelectedFlight} onMonth={changeMonth} />}
         {tab === 'Money' && <MoneyScreen key={`${roster?.period.start ?? 'none'}-${payRevision}`} roster={roster} palette={palette} />}
         {tab === 'More' && <MoreScreen rosters={rosters} profile={crewProfile} palette={palette} onDeleteRoster={deleteRoster} onProfileChange={updateCrewProfile} onErase={eraseAll} onSalarySettings={() => setSalarySettingsOpen(true)} />}
@@ -368,7 +369,7 @@ export default function MainScreen() {
   </SafeAreaView>;
 }
 
-function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing }: { allDuties: RosterDuty[]; fallbackRoster?: ParsedAirAstanaRoster; rosters: ParsedAirAstanaRoster[]; palette: Palette; onImport: () => void; importing: boolean }) {
+function Home({ allDuties, fallbackRoster, rosters, palette, lovedMode, onImport, importing }: { allDuties: RosterDuty[]; fallbackRoster?: ParsedAirAstanaRoster; rosters: ParsedAirAstanaRoster[]; palette: Palette; lovedMode: boolean; onImport: () => void; importing: boolean }) {
   const now = useNow();
   const [crewOpen, setCrewOpen] = useState(false);
   const heroPressScale = useRef(new Animated.Value(1)).current;
@@ -376,6 +377,34 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
   const focus = useMemo(() => pickFocusDuty(timeline, now), [timeline, now]);
   const roster = focus?.roster ?? fallbackRoster;
   const duty = focus?.duty;
+  // Special Mode's little personal note. Read only when the hero card resolves an arrival
+  // station, so this never triggers an extra weather fetch on its own -- WeatherChip below
+  // already fetches the same code, and this hook just reads the same cache. The phrase
+  // itself is picked once per Home mount (Home fully remounts on every tab visit, since
+  // tabs render conditionally rather than staying mounted) so it reads like a fixed note
+  // left for this visit, not something that shifts under the viewer while they read it.
+  const arrivalWeather = useAirportWeather(duty?.sectors[duty.sectors.length - 1]?.arrival);
+  const loveContext = useMemo(() => detectLoveContext({
+    now,
+    isActive: focus?.reportMs !== undefined && focus?.releaseMs !== undefined && focus.reportMs <= now && focus.releaseMs >= now,
+    isUpcoming: focus?.reportMs !== undefined && focus.reportMs > now,
+    reportMs: focus?.reportMs,
+    releaseMs: focus?.releaseMs,
+    arrivalTemp: arrivalWeather?.temp,
+  }), [now, focus, arrivalWeather?.temp]);
+  // Picked once per mount, but only once real duty data exists -- MainScreen loads rosters
+  // asynchronously, so Home's very first render (right when the app opens, before that
+  // load resolves) always has no duty yet. A useState lazy initializer here would lock in
+  // that empty, context-less state for the rest of the mount and never correct itself once
+  // the real duty arrives a moment later -- exactly wrong, since app-open is the one moment
+  // this note matters most.
+  const [lovePhrase, setLovePhrase] = useState<string>();
+  const lovePhrasePicked = useRef(false);
+  useEffect(() => {
+    if (lovePhrasePicked.current || !duty) return;
+    lovePhrasePicked.current = true;
+    setLovePhrase(pickLovePhrase(loveContext));
+  }, [duty, loveContext]);
 
   if (!roster || !duty) return <View style={styles.screen}>
     <Text style={[styles.sectionTitle, { color: palette.text }]}>Your roster, simplified.</Text>
@@ -439,6 +468,8 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onImport, importing
         <WeatherChip code={last.arrival} targetDate={forecastDate} palette={palette} />
       </Pressable>
     </Animated.View>
+
+    {lovedMode && lovePhrase && <Text style={[styles.loveNote, { color: palette.rose }]}>{lovePhrase}</Text>}
 
     <Text style={[styles.label, { color: palette.muted }]}>{rosterMonthLabel(roster)}</Text>
     <View style={styles.summaryRow}>
@@ -861,6 +892,7 @@ const styles = StyleSheet.create({
   timeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 }, timeCell: { flex: 1, minWidth: 0 },
   timeLabel: { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: .3 }, timeValue: { fontSize: 22, lineHeight: 27, fontWeight: '700', marginTop: 3, fontVariant: ['tabular-nums'] },
   heroFoot: { fontSize: 13, fontWeight: '600', marginTop: 14 },
+  loveNote: { fontSize: 11, fontWeight: '700', letterSpacing: .9, textTransform: 'uppercase', textAlign: 'center', marginTop: 2 },
   weatherRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }, weatherIcon: { fontSize: 16 }, weatherTemp: { fontSize: 14, fontWeight: '800' }, weatherMeta: { flex: 1, fontSize: 11.5, fontWeight: '600' },
   forecastPopup: { width: '88%', maxWidth: 340, borderWidth: 1, borderRadius: 22, padding: 18 }, forecastList: { marginTop: 10, gap: 6 }, forecastLine: { flexDirection: 'row', alignItems: 'center', gap: 8 }, forecastDay: { width: 42, fontWeight: '700' }, forecastLabel: { flex: 1 }, forecastTemp: { fontWeight: '700', fontVariant: ['tabular-nums'] }, forecastStateRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }, forecastRetry: { marginTop: 6, paddingVertical: 4 },
   summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14 }, summaryValue: { fontSize: 28, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] },
