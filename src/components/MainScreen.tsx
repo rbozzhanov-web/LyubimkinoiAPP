@@ -690,18 +690,14 @@ function MoreScreen({ rosters, roster, profile, palette, onDeleteRoster, onProfi
 
     <View style={[styles.libraryCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
       <Text style={[styles.cardTitle, { color: palette.text }]}>Imported rosters</Text>
-      {rosters.length ? <FlatList
-        data={rosters}
-        keyExtractor={(item) => item.period.start}
-        style={styles.libraryList}
-        showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => <View style={[styles.libraryRow, { borderColor: palette.line }]}>
+      {rosters.length ? <View style={styles.libraryList}>
+        {rosters.map((item) => <View key={item.period.start} style={[styles.libraryRow, { borderColor: palette.line }]}>
           <View style={styles.grow}><Text style={[styles.libraryMonth, { color: palette.text }]}>{rosterMonthLabel(item)}</Text><Text style={[styles.meta, { color: palette.muted }]}>{item.subject?.base ?? 'Roster'} · parsed locally</Text></View>
           <Pressable onPress={() => setDeleteCandidate(item)} hitSlop={8} style={[styles.deleteRosterButton, { backgroundColor: palette.surface }]} accessibilityRole="button" accessibilityLabel={`Delete ${rosterMonthLabel(item)} roster`}>
             <Text style={[styles.deleteRosterText, { color: palette.rose }]}>Delete</Text>
           </Pressable>
-        </View>}
-      /> : <Text style={[styles.meta, { color: palette.muted }]}>No months imported</Text>}
+        </View>)}
+      </View> : <Text style={[styles.meta, { color: palette.muted }]}>No months imported</Text>}
     </View>
 
     <InfoCard title="Privacy" palette={palette}><Text style={[styles.meta, { color: palette.muted }]}>Roster PDFs are parsed locally and the source PDF bytes are not stored. Crew lists, parsed roster data and salary settings stay on this device. Weather sends only an airport code to Open-Meteo — no roster or crew data.</Text></InfoCard>
@@ -1000,7 +996,7 @@ const styles = StyleSheet.create({
   monthNav: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, monthNavText: { fontSize: 12, fontWeight: '600' }, error: { fontSize: 12 },
   emptyCard: { borderWidth: 1, borderRadius: 20, padding: 14 }, innerWindow: { flex: 1, minHeight: 0, borderWidth: 1, borderRadius: 20, overflow: 'hidden' }, listContent: { padding: 8, gap: 7, paddingBottom: 18 }, rosterCard: { borderWidth: 1, borderRadius: 16, padding: 13 }, rosterCardToday: { borderWidth: 1.5 }, flightCardTop: { flexDirection: 'row', justifyContent: 'space-between' }, flightNumber: { fontSize: 11, fontWeight: '700' }, flightNumbers: { fontSize: 11, lineHeight: 16, fontWeight: '700', marginTop: 4, flexShrink: 1 }, rosterRoute: { fontSize: 20, lineHeight: 25, fontWeight: '700', marginTop: 5 },
   infoCard: { borderWidth: 1, borderRadius: 20, padding: 14, gap: 3 }, cardTitle: { fontSize: 15, fontWeight: '700' }, settingsCard: { minHeight: 68, borderWidth: 1, borderRadius: 20, padding: 14, flexDirection: 'row', alignItems: 'center' }, chevron: { fontSize: 30 }, secondaryButton: { height: 48, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, secondaryText: { fontWeight: '600' },
-  libraryCard: { borderWidth: 1, borderRadius: 20, padding: 14, minHeight: 88, maxHeight: 190 }, libraryList: { marginTop: 5 }, libraryRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth }, libraryMonth: { fontSize: 14, fontWeight: '700' }, deleteRosterButton: { minWidth: 58, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 }, deleteRosterText: { fontSize: 11, fontWeight: '700' },
+  libraryCard: { borderWidth: 1, borderRadius: 20, padding: 14, minHeight: 88 }, libraryList: { marginTop: 5 }, libraryRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth }, libraryMonth: { fontSize: 14, fontWeight: '700' }, deleteRosterButton: { minWidth: 58, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 }, deleteRosterText: { fontSize: 11, fontWeight: '700' },
   depthSurface: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 24, elevation: 5 },
   tabBar: { height: 68, marginTop: 8, marginBottom: 4, borderWidth: 1, borderRadius: 22, flexDirection: 'row' }, tabSelection: { position: 'absolute', left: 4, top: 4, bottom: 4, borderRadius: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 2 }, tabItem: { flex: 1, zIndex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabIconWrap: { minWidth: 35, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, tabIcon: { textAlign: 'center' }, tabText: { fontSize: 11, fontWeight: '600' },
   sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end' }, flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderTopWidth: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 18, paddingBottom: 12, overflow: 'hidden' }, flightSheetContent: { minHeight: 0, flexShrink: 1 }, sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }, sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 }, swipeHint: { fontSize: 10, marginTop: 7 }, flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 7 }, crewScroll: { minHeight: 0, flexShrink: 1 }, crewList: { paddingBottom: 12 }, flightSegment: { marginTop: 8, marginBottom: 3 }, crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' }, avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, avatarText: { fontSize: 12, fontWeight: '800' }, crewName: { fontSize: 14, fontWeight: '600' },
