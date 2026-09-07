@@ -892,7 +892,7 @@ const styles = StyleSheet.create({
   timeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 }, timeCell: { flex: 1, minWidth: 0 },
   timeLabel: { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: .3 }, timeValue: { fontSize: 22, lineHeight: 27, fontWeight: '700', marginTop: 3, fontVariant: ['tabular-nums'] },
   heroFoot: { fontSize: 13, fontWeight: '600', marginTop: 14 },
-  loveNote: { fontSize: 13.5, lineHeight: 19, fontStyle: 'italic', fontWeight: '600', textAlign: 'center', marginTop: 2 },
+  loveNote: { fontSize: 11, fontWeight: '700', letterSpacing: .9, textTransform: 'uppercase', textAlign: 'center', marginTop: 2 },
   weatherRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }, weatherIcon: { fontSize: 16 }, weatherTemp: { fontSize: 14, fontWeight: '800' }, weatherMeta: { flex: 1, fontSize: 11.5, fontWeight: '600' },
   forecastPopup: { width: '88%', maxWidth: 340, borderWidth: 1, borderRadius: 22, padding: 18 }, forecastList: { marginTop: 10, gap: 6 }, forecastLine: { flexDirection: 'row', alignItems: 'center', gap: 8 }, forecastDay: { width: 42, fontWeight: '700' }, forecastLabel: { flex: 1 }, forecastTemp: { fontWeight: '700', fontVariant: ['tabular-nums'] }, forecastStateRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }, forecastRetry: { marginTop: 6, paddingVertical: 4 },
   summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14 }, summaryValue: { fontSize: 28, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] },
