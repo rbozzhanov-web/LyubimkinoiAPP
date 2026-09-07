@@ -669,7 +669,9 @@ function MoreScreen({ rosters, roster, profile, palette, onDeleteRoster, onProfi
   const yearRosters = year ? rosters.filter((item) => item.period.start.startsWith(`${year}-`)) : [];
 
   return <>
+    <View style={styles.moreViewport} testID="more-viewport">
     <ScrollView
+      testID="more-scroll"
       style={styles.moreScroll}
       contentContainerStyle={styles.moreScrollContent}
       showsVerticalScrollIndicator={false}
@@ -703,6 +705,7 @@ function MoreScreen({ rosters, roster, profile, palette, onDeleteRoster, onProfi
     <InfoCard title="Privacy" palette={palette}><Text style={[styles.meta, { color: palette.muted }]}>Roster PDFs are parsed locally and the source PDF bytes are not stored. Crew lists, parsed roster data and salary settings stay on this device. Weather sends only an airport code to Open-Meteo — no roster or crew data.</Text></InfoCard>
     {rosters.length > 0 && <Pressable onPress={onErase} style={[styles.secondaryButton, { borderColor: palette.line }]}><Text style={[styles.secondaryText, { color: palette.text }]}>Erase local roster & pay data</Text></Pressable>}
     </ScrollView>
+    </View>
 
     <Modal visible={profileOpen} transparent animationType="fade" onRequestClose={() => setProfileOpen(false)}>
       <View style={styles.modalBackdrop}>
@@ -973,7 +976,12 @@ const styles = StyleSheet.create({
   marqueeWrap: { overflow: 'hidden', alignItems: 'flex-start' }, marqueeRow: { flexDirection: 'row' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   modeButton: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }, modeGlyph: { fontSize: 19 }, modeGlyphPair: { fontSize: 13, letterSpacing: -3 },
-  viewport: { flex: 1, minHeight: 0 }, screen: { flex: 1, paddingTop: 8, gap: 12 }, moreScroll: { flex: 1, minHeight: 0 }, moreScrollContent: { paddingTop: 8, paddingBottom: 8, gap: 12 }, grow: { flex: 1, minWidth: 0 },
+  viewport: { flex: 1, minHeight: 0 }, screen: { flex: 1, paddingTop: 8, gap: 12 },
+  // A separate clipped viewport keeps the scroller bounded inside the animated tab
+  // surface. Its content must not size the viewport or paint beneath the tab bar.
+  moreViewport: { flex: 1, minHeight: 0, overflow: 'hidden' },
+  moreScroll: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
+  moreScrollContent: { paddingTop: 8, paddingBottom: 16, gap: 12 }, grow: { flex: 1, minWidth: 0 },
   sectionTitle: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.8 }, intro: { fontSize: 15, lineHeight: 22 }, label: { fontSize: 11, fontWeight: '700', letterSpacing: .9 }, meta: { fontSize: 13, lineHeight: 18 },
   heroCard: { borderWidth: 1, borderRadius: 26, padding: 16 },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
