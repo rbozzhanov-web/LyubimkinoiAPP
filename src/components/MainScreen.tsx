@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, FlatList, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View, useColorScheme, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { ActivityIndicator, Animated, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SalaryCard } from './SalaryCard';
 import { SalarySettingsSheet } from './SalarySettingsSheet';
@@ -89,6 +89,11 @@ export default function MainScreen() {
   const dark = hydrated && (themeOverride ?? scheme) === 'dark';
   const [tab, setTab] = useState<Tab>('Home');
   const [lovedMode, setLovedMode] = useState(false);
+  // Owned here (not inside Home) so the header keeps showing the last-picked note while the
+  // viewer browses other tabs -- Home fully unmounts on tab switch, but this state doesn't.
+  // Home still does all the actual picking; this just mirrors its result up one level.
+  const [headerLovePhrase, setHeaderLovePhrase] = useState<string>();
+  const handleLovePhrase = useCallback((phrase: string) => setHeaderLovePhrase(phrase), []);
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [unlockCode, setUnlockCode] = useState('');
   const [unlockError, setUnlockError] = useState(false);
@@ -288,7 +293,7 @@ export default function MainScreen() {
   return <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]} edges={desktopWeb ? ['bottom'] : ['top', 'bottom']}>
     <View style={styles.app}>
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerText}>
           {lovedMode
             ? <View style={styles.brandWord} accessibilityLabel="KhaVair special mode">
                 <Text style={[styles.brand, { color: palette.text }]}>Kha</Text>
@@ -298,7 +303,9 @@ export default function MainScreen() {
                 <Text style={[styles.brand, { color: palette.text }]}>air</Text>
               </View>
             : <Text style={[styles.brand, { color: palette.text }]}>KhaVair</Text>}
-          <Text style={[styles.kicker, { color: palette.muted }]}>CABIN CREW COMPANION</Text>
+          {lovedMode && headerLovePhrase
+            ? <Text numberOfLines={1} style={[styles.headerLoveNote, { color: palette.rose }]}>{headerLovePhrase}</Text>
+            : <Text style={[styles.kicker, { color: palette.muted }]}>CABIN CREW COMPANION</Text>}
         </View>
         <View style={styles.headerActions}>
           {lovedMode && <Pressable onPress={toggleTheme} style={[styles.modeButton, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface }]} accessibilityRole="button" accessibilityLabel={themeOverride === undefined ? 'Switch to light theme' : themeOverride === 'light' ? 'Switch to dark theme' : 'Switch to system theme'}>
@@ -311,10 +318,10 @@ export default function MainScreen() {
       </View>
 
       <SwipeSurface ref={tabSwipeRef} style={styles.viewport} onSwipeLeft={tab === 'More' ? undefined : () => changeTab(1)} onSwipeRight={tab === 'Home' ? undefined : () => changeTab(-1)}>
-        {tab === 'Home' && <Home allDuties={allDuties} fallbackRoster={roster} rosters={rosters} palette={palette} lovedMode={lovedMode} onImport={importRoster} importing={importing} />}
+        {tab === 'Home' && <Home allDuties={allDuties} fallbackRoster={roster} rosters={rosters} palette={palette} onLovePhrase={handleLovePhrase} onImport={importRoster} importing={importing} />}
         {tab === 'Roster' && <RosterScreen roster={roster} rosters={rosters} duties={duties} selectedSector={selectedSector} palette={palette} profile={crewProfile} importing={importing} error={importError} onImport={importRoster} onSelect={setSelectedFlight} onMonth={changeMonth} />}
         {tab === 'Money' && <MoneyScreen key={`${roster?.period.start ?? 'none'}-${payRevision}`} roster={roster} palette={palette} />}
-        {tab === 'More' && <MoreScreen rosters={rosters} profile={crewProfile} palette={palette} onDeleteRoster={deleteRoster} onProfileChange={updateCrewProfile} onErase={eraseAll} onSalarySettings={() => setSalarySettingsOpen(true)} />}
+        {tab === 'More' && <MoreScreen rosters={rosters} roster={roster} profile={crewProfile} palette={palette} onDeleteRoster={deleteRoster} onProfileChange={updateCrewProfile} onErase={eraseAll} onSalarySettings={() => setSalarySettingsOpen(true)} />}
       </SwipeSurface>
 
       <View
@@ -369,7 +376,7 @@ export default function MainScreen() {
   </SafeAreaView>;
 }
 
-function Home({ allDuties, fallbackRoster, rosters, palette, lovedMode, onImport, importing }: { allDuties: RosterDuty[]; fallbackRoster?: ParsedAirAstanaRoster; rosters: ParsedAirAstanaRoster[]; palette: Palette; lovedMode: boolean; onImport: () => void; importing: boolean }) {
+function Home({ allDuties, fallbackRoster, rosters, palette, onLovePhrase, onImport, importing }: { allDuties: RosterDuty[]; fallbackRoster?: ParsedAirAstanaRoster; rosters: ParsedAirAstanaRoster[]; palette: Palette; onLovePhrase: (phrase: string) => void; onImport: () => void; importing: boolean }) {
   const now = useNow();
   const [crewOpen, setCrewOpen] = useState(false);
   const heroPressScale = useRef(new Animated.Value(1)).current;
@@ -377,12 +384,13 @@ function Home({ allDuties, fallbackRoster, rosters, palette, lovedMode, onImport
   const focus = useMemo(() => pickFocusDuty(timeline, now), [timeline, now]);
   const roster = focus?.roster ?? fallbackRoster;
   const duty = focus?.duty;
-  // Special Mode's little personal note. Read only when the hero card resolves an arrival
-  // station, so this never triggers an extra weather fetch on its own -- WeatherChip below
-  // already fetches the same code, and this hook just reads the same cache. The phrase
-  // itself is picked once per Home mount (Home fully remounts on every tab visit, since
-  // tabs render conditionally rather than staying mounted) so it reads like a fixed note
-  // left for this visit, not something that shifts under the viewer while they read it.
+  // Special Mode's little personal note, shown up in the header (not here) so it stays
+  // visible while the viewer browses other tabs. Read only when the hero card resolves an
+  // arrival station, so this never triggers an extra weather fetch on its own -- WeatherChip
+  // below already fetches the same code, and this hook just reads the same cache. The
+  // phrase itself is picked once per Home mount (Home fully remounts on every tab visit,
+  // since tabs render conditionally rather than staying mounted) so it reads like a fixed
+  // note left for this visit, not something that shifts under the viewer while they read it.
   const arrivalWeather = useAirportWeather(duty?.sectors[duty.sectors.length - 1]?.arrival);
   const loveContext = useMemo(() => detectLoveContext({
     now,
@@ -399,7 +407,6 @@ function Home({ allDuties, fallbackRoster, rosters, palette, lovedMode, onImport
   // that empty, context-less state for the rest of the mount and never correct itself once
   // the real duty arrives a moment later -- exactly wrong, since app-open is the one moment
   // this note matters most.
-  const [lovePhrase, setLovePhrase] = useState<string>();
   const lovePhrasePicked = useRef(false);
   // useAirportWeather's own cache read settles one render after `duty` (and the arrival
   // code derived from it) first becomes available -- picking immediately on that same
@@ -416,8 +423,8 @@ function Home({ allDuties, fallbackRoster, rosters, palette, lovedMode, onImport
   useEffect(() => {
     if (lovePhrasePicked.current || !dutyReady) return;
     lovePhrasePicked.current = true;
-    setLovePhrase(pickLovePhrase(loveContext));
-  }, [dutyReady, loveContext]);
+    onLovePhrase(pickLovePhrase(loveContext));
+  }, [dutyReady, loveContext, onLovePhrase]);
 
   if (!roster || !duty) return <View style={styles.screen}>
     <Text style={[styles.sectionTitle, { color: palette.text }]}>Your roster, simplified.</Text>
@@ -436,19 +443,10 @@ function Home({ allDuties, fallbackRoster, rosters, palette, lovedMode, onImport
   const spanMinutes = reportMs !== undefined && releaseMs !== undefined ? Math.round((releaseMs - reportMs) / 60000) : undefined;
   const dutyMinutes = spanMinutes !== undefined && spanMinutes > 0 ? spanMinutes : undefined;
 
-  const year = roster.period.start.slice(0, 4);
-  const yearRosters = rosters.filter((item) => item.period.start.startsWith(`${year}-`));
-  const block = roster.totals.blockMinutes;
-  const night = roster.totals.nightMinutes;
-  const nightShare = block && night !== undefined ? Math.round((night / block) * 100) : undefined;
   const neighbours = previousDuties(timeline, focus, now, 6);
+  const dutyStatusWord = countdown ? (isUpcoming ? 'TO REPORT' : 'ON DUTY') : 'LATEST DUTY';
 
   return <View style={styles.screen}>
-    <View style={styles.dutyHead}>
-      <Text style={[styles.label, { color: isActive ? palette.accent : palette.muted }]}>{isUpcoming ? 'NEXT DUTY' : isActive ? 'ON DUTY NOW' : 'LATEST DUTY'}</Text>
-      <Text style={[styles.label, { color: palette.muted }]}>{duty.dateLabel}</Text>
-    </View>
-
     <Animated.View style={{ transform: [{ scale: heroPressScale }] }}>
       <Pressable
         accessibilityRole="button"
@@ -458,14 +456,15 @@ function Home({ allDuties, fallbackRoster, rosters, palette, lovedMode, onImport
         onPress={() => { softHaptic(); setCrewOpen(true); }}
         style={[styles.heroCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
       >
-        <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.heroRoute, { color: palette.text }]}>{routeChain(duty)}</Text>
-        <View style={[styles.heroMetaRow, countdown ? styles.heroMetaRowTall : undefined]}>
-          <Text numberOfLines={1} style={[styles.heroFlight, { color: palette.muted }]}>{duty.sectors.map((sector) => sector.flightNumber).join(' · ')}</Text>
-          {countdown && <View style={[styles.countdownPill, { backgroundColor: palette.accentSoft, borderColor: palette.line }]}>
-            <Text style={[styles.countdown, { color: palette.text }]}>{countdown}</Text>
-            <Text style={[styles.countdownLabel, { color: palette.muted }]}>{isUpcoming ? 'TO REPORT' : 'ON DUTY'}</Text>
-          </View>}
+        <View style={styles.heroTopRow}>
+          <ScrollableRouteText text={routeChain(duty)} textStyle={styles.heroRoute} color={palette.text} cardBackground={palette.surfaceStrong} />
+          <View style={[styles.dutyPill, { backgroundColor: palette.accentSoft, borderColor: palette.line }]}>
+            {countdown && <Text numberOfLines={1} style={[styles.dutyPillValue, { color: palette.text }]}>{countdown}</Text>}
+            <Text numberOfLines={1} style={[styles.dutyPillLabel, { color: isActive ? palette.accent : palette.muted }]}>{dutyStatusWord}</Text>
+            <Text numberOfLines={1} style={[styles.dutyPillDate, { color: palette.muted }]}>{duty.dateLabel}</Text>
+          </View>
         </View>
+        <Text numberOfLines={1} style={[styles.heroFlight, { color: palette.muted }]}>{duty.sectors.map((sector) => sector.flightNumber).join(' · ')}</Text>
 
         <View style={[styles.timeDivider, { backgroundColor: palette.line }]} />
         <View style={styles.timeRow}>
@@ -481,17 +480,6 @@ function Home({ allDuties, fallbackRoster, rosters, palette, lovedMode, onImport
         <WeatherChip code={last.arrival} targetDate={forecastDate} palette={palette} />
       </Pressable>
     </Animated.View>
-
-    {lovedMode && lovePhrase && <Text style={[styles.loveNote, { color: palette.rose }]}>{lovePhrase}</Text>}
-
-    <Text style={[styles.label, { color: palette.muted }]}>{rosterMonthLabel(roster)}</Text>
-    <View style={styles.summaryRow}>
-      <Summary title="BLOCK HOURS" value={formatMinutes(block)} detail={`${operatingCount(roster)} sectors flown`} palette={palette} />
-      <Summary title="NIGHT HOURS" value={formatMinutes(night)} detail={nightShare === undefined ? 'reported by the roster' : `${nightShare}% of block time`} palette={palette} />
-    </View>
-    {yearRosters.length > 1 && <Text style={[styles.meta, { color: palette.muted }]}>
-      {year} to date · {formatMinutes(sumReportedBlockMinutes(yearRosters))} block · {formatMinutes(sumReportedNightMinutes(yearRosters))} night · {yearRosters.length} months imported
-    </Text>}
 
     {neighbours.length > 0 && <View style={styles.upNext}>
       <Text style={[styles.label, { color: palette.muted }]}>PREVIOUS FLIGHTS</Text>
@@ -650,7 +638,7 @@ function MoneyScreen({ roster, palette }: { roster?: ParsedAirAstanaRoster; pale
   return <View style={styles.screen}><Text style={[styles.sectionTitle, { color: palette.text }]}>Money</Text>{roster ? <SalaryCard roster={roster} palette={palette} /> : <View style={[styles.emptyCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.meta, { color: palette.muted }]}>Import a roster first.</Text></View>}</View>;
 }
 
-function MoreScreen({ rosters, profile, palette, onDeleteRoster, onProfileChange, onErase, onSalarySettings }: { rosters: ParsedAirAstanaRoster[]; profile: CrewProfile; palette: Palette; onDeleteRoster: (periodStart: string) => void; onProfileChange: (contractRank: string) => void; onErase: () => void; onSalarySettings: () => void }) {
+function MoreScreen({ rosters, roster, profile, palette, onDeleteRoster, onProfileChange, onErase, onSalarySettings }: { rosters: ParsedAirAstanaRoster[]; roster?: ParsedAirAstanaRoster; profile: CrewProfile; palette: Palette; onDeleteRoster: (periodStart: string) => void; onProfileChange: (contractRank: string) => void; onErase: () => void; onSalarySettings: () => void }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [rankDraft, setRankDraft] = useState(profile.contractRank);
   const [deleteCandidate, setDeleteCandidate] = useState<ParsedAirAstanaRoster>();
@@ -667,11 +655,30 @@ function MoreScreen({ rosters, profile, palette, onDeleteRoster, onProfileChange
     setDeleteCandidate(undefined);
   };
 
+  const year = roster?.period.start.slice(0, 4);
+  const yearRosters = year ? rosters.filter((item) => item.period.start.startsWith(`${year}-`)) : [];
+  const block = roster?.totals.blockMinutes;
+  const night = roster?.totals.nightMinutes;
+  const nightShare = block && night !== undefined ? Math.round((night / block) * 100) : undefined;
+
   return <View style={styles.screen}>
     <Text style={[styles.sectionTitle, { color: palette.text }]}>More</Text>
     <Pressable onPress={() => { setRankDraft(profile.contractRank); setProfileOpen(true); }} style={[styles.settingsCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]} accessibilityRole="button" accessibilityLabel="Edit profile position">
       <View style={styles.grow}><Text style={[styles.cardTitle, { color: palette.text }]}>Profile</Text><Text style={[styles.meta, { color: palette.muted }]}>Position / rank · {profile.contractRank}</Text><Text style={[styles.meta, { color: palette.muted }]}>Display profile only · does not change pay rules</Text></View><Text style={[styles.chevron, { color: palette.accent }]}>›</Text>
     </Pressable>
+
+    {roster && <View style={[styles.libraryCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+      <Text style={[styles.cardTitle, { color: palette.text }]}>Flight hours</Text>
+      <Text style={[styles.meta, { color: palette.muted }]}>{rosterMonthLabel(roster)}</Text>
+      <View style={styles.summaryRow}>
+        <Summary title="BLOCK HOURS" value={formatMinutes(block ?? 0)} detail={`${operatingCount(roster)} sectors flown`} palette={palette} />
+        <Summary title="NIGHT HOURS" value={formatMinutes(night ?? 0)} detail={nightShare === undefined ? 'reported by the roster' : `${nightShare}% of block time`} palette={palette} />
+      </View>
+      {yearRosters.length > 1 && <Text style={[styles.meta, { color: palette.muted }]}>
+        {year} to date · {formatMinutes(sumReportedBlockMinutes(yearRosters))} block · {formatMinutes(sumReportedNightMinutes(yearRosters))} night · {yearRosters.length} months imported
+      </Text>}
+    </View>}
+
     <Pressable onPress={onSalarySettings} style={[styles.settingsCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}><View style={styles.grow}><Text style={[styles.cardTitle, { color: palette.text }]}>Salary settings</Text><Text style={[styles.meta, { color: palette.muted }]}>Optional customization for another crew member</Text></View><Text style={[styles.chevron, { color: palette.accent }]}>›</Text></Pressable>
 
     <View style={[styles.libraryCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
@@ -821,6 +828,28 @@ function arrivalForecastDate(duty: Duty): string | undefined {
   return duty.releaseDate ?? last?.date ?? duty.date;
 }
 function TimeCell({ label, value, palette }: { label: string; value: string; palette: Palette }) { return <View style={styles.timeCell}><Text numberOfLines={1} style={[styles.timeLabel, { color: palette.muted }]}>{label}</Text><Text style={[styles.timeValue, { color: palette.text }]}>{value}</Text></View>; }
+
+/**
+ * Most routes fit comfortably next to the duty pill, so this behaves like a plain Text. When
+ * one doesn't (a long multi-sector chain), it scrolls horizontally at full size instead of
+ * shrinking to fit -- with a fade on whichever edge still has more to reveal, as a hint that
+ * there's more. Nothing here persists a scroll offset, so a fresh Home mount (Home fully
+ * remounts on every tab visit) always starts back at the beginning.
+ */
+function ScrollableRouteText({ text, textStyle, color, cardBackground }: { text: string; textStyle: object; color: string; cardBackground: string }) {
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [contentWidth, setContentWidth] = useState(0);
+  const overflowing = containerWidth > 0 && contentWidth > containerWidth + 1;
+  return <View style={styles.routeScrollWrap} onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} bounces={false} style={styles.routeScroll} contentContainerStyle={styles.routeScrollContent}>
+      <Text numberOfLines={1} onLayout={(event) => setContentWidth(event.nativeEvent.layout.width)} style={[textStyle, { color, flexShrink: 0 }]}>{text}</Text>
+    </ScrollView>
+    {overflowing && Platform.OS === 'web' && <>
+      <View pointerEvents="none" style={[styles.routeFadeLeft, { background: `linear-gradient(to right, ${cardBackground}, transparent)` } as any]} />
+      <View pointerEvents="none" style={[styles.routeFadeRight, { background: `linear-gradient(to left, ${cardBackground}, transparent)` } as any]} />
+    </>}
+  </View>;
+}
 function WeatherChip({ code, targetDate, palette }: { code: string; targetDate?: string; palette: Palette }) {
   const weather = useAirportWeather(code);
   const { forecast, status: forecastStatus, startDate: forecastStartDate, retry } = useAirportForecastState(code, FORECAST_DAYS, targetDate);
@@ -891,21 +920,23 @@ function operatingCount(roster: ParsedAirAstanaRoster) { return roster.sectors.f
 
 const styles = StyleSheet.create({
   safe: { flex: 1 }, app: { flex: 1, width: '100%', maxWidth: 620, alignSelf: 'center', paddingHorizontal: 16 },
-  header: { height: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, brand: { fontSize: 27, fontWeight: '700', letterSpacing: -.8 }, brandWord: { flexDirection: 'row', alignItems: 'baseline' }, vHeartMark: { width: 25, height: 31, alignItems: 'center', justifyContent: 'center' }, vHeartGlyph: { fontSize: 25, lineHeight: 31, fontWeight: '700' }, kicker: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
+  header: { height: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, headerText: { flex: 1, minWidth: 0, marginRight: 10 }, brand: { fontSize: 27, fontWeight: '700', letterSpacing: -.8 }, brandWord: { flexDirection: 'row', alignItems: 'baseline' }, vHeartMark: { width: 25, height: 31, alignItems: 'center', justifyContent: 'center' }, vHeartGlyph: { fontSize: 25, lineHeight: 31, fontWeight: '700' }, kicker: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
+  headerLoveNote: { fontSize: 11, fontWeight: '700', letterSpacing: .9, textTransform: 'uppercase' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   modeButton: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }, modeGlyph: { fontSize: 19 }, modeGlyphPair: { fontSize: 13, letterSpacing: -3 },
   viewport: { flex: 1, minHeight: 0 }, screen: { flex: 1, paddingTop: 8, gap: 12 }, grow: { flex: 1, minWidth: 0 },
   sectionTitle: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.8 }, intro: { fontSize: 15, lineHeight: 22 }, label: { fontSize: 11, fontWeight: '700', letterSpacing: .9 }, meta: { fontSize: 13, lineHeight: 18 },
-  dutyHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  heroCard: { borderWidth: 1, borderRadius: 26, padding: 18 },
-  heroRoute: { fontSize: 36, lineHeight: 42, fontWeight: '700', letterSpacing: -1 },
-  heroMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }, heroMetaRowTall: { minHeight: 44 }, heroFlight: { flex: 1, fontSize: 13, fontWeight: '600' },
-  countdownPill: { borderWidth: 1, borderRadius: 15, paddingHorizontal: 12, paddingVertical: 6, alignItems: 'center' }, countdown: { fontSize: 18, fontWeight: '800', fontVariant: ['tabular-nums'] }, countdownLabel: { fontSize: 10, fontWeight: '700', letterSpacing: .7, marginTop: 1 },
-  timeDivider: { height: StyleSheet.hairlineWidth, marginVertical: 14 },
+  heroCard: { borderWidth: 1, borderRadius: 26, padding: 16 },
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  heroRoute: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.7 },
+  routeScrollWrap: { flex: 1, minWidth: 0, overflow: 'hidden' }, routeScroll: { flexGrow: 0 }, routeScrollContent: { flexGrow: 0 },
+  routeFadeLeft: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 20 }, routeFadeRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 20 },
+  heroFlight: { fontSize: 15.6, fontWeight: '600', marginTop: 6 },
+  dutyPill: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5, alignItems: 'center', minWidth: 0 }, dutyPillValue: { fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] }, dutyPillLabel: { fontSize: 9, fontWeight: '700', letterSpacing: .5, marginTop: 2 }, dutyPillDate: { fontSize: 9, fontWeight: '600', letterSpacing: .3, marginTop: 1 },
+  timeDivider: { height: StyleSheet.hairlineWidth, marginVertical: 12 },
   timeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 }, timeCell: { flex: 1, minWidth: 0 },
   timeLabel: { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: .3 }, timeValue: { fontSize: 22, lineHeight: 27, fontWeight: '700', marginTop: 3, fontVariant: ['tabular-nums'] },
-  heroFoot: { fontSize: 13, fontWeight: '600', marginTop: 14 },
-  loveNote: { fontSize: 11, fontWeight: '700', letterSpacing: .9, textTransform: 'uppercase', textAlign: 'center', marginTop: 2 },
+  heroFoot: { fontSize: 13, fontWeight: '600', marginTop: 12 },
   weatherRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }, weatherIcon: { fontSize: 16 }, weatherTemp: { fontSize: 14, fontWeight: '800' }, weatherMeta: { flex: 1, fontSize: 11.5, fontWeight: '600' },
   forecastPopup: { width: '88%', maxWidth: 340, borderWidth: 1, borderRadius: 22, padding: 18 }, forecastList: { marginTop: 10, gap: 6 }, forecastLine: { flexDirection: 'row', alignItems: 'center', gap: 8 }, forecastDay: { width: 42, fontWeight: '700' }, forecastLabel: { flex: 1 }, forecastTemp: { fontWeight: '700', fontVariant: ['tabular-nums'] }, forecastStateRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }, forecastRetry: { marginTop: 6, paddingVertical: 4 },
   summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14 }, summaryValue: { fontSize: 28, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] },
