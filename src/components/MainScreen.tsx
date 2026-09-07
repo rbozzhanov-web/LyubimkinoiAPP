@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { ActivityIndicator, Animated, Easing, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SalaryCard } from './SalaryCard';
 import { SalarySettingsSheet } from './SalarySettingsSheet';
@@ -304,7 +304,7 @@ export default function MainScreen() {
               </View>
             : <Text style={[styles.brand, { color: palette.text }]}>KhaVair</Text>}
           {lovedMode && headerLovePhrase
-            ? <Text numberOfLines={2} style={[styles.headerLoveNote, { color: palette.rose }]}>{truncateAtWord(headerLovePhrase, HEADER_LOVE_NOTE_MAX_CHARS)}</Text>
+            ? <MarqueeText text={headerLovePhrase} textStyle={styles.headerLoveNote} color={palette.rose} />
             : <Text style={[styles.kicker, { color: palette.muted }]}>CABIN CREW COMPANION</Text>}
         </View>
         <View style={styles.headerActions}>
@@ -824,21 +824,47 @@ function dateMetaFor(isoDate: string | undefined, dateLabel: string): { label: s
   const weekday = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][weekdayIndex];
   return { label: `${dateLabel} · ${weekday}`, weekend: weekdayIndex === 0 || weekdayIndex === 6 };
 }
-// Measured empirically against the header note's actual column width and typography
-// (~267px, 11px bold uppercase with .9 letter-spacing): about 66 characters fit on 2 lines
-// before CSS's own line-clamp would have to step in and clip mid-word. Kept safely under
-// that so word-safe truncation here is always what actually decides the cutoff point.
-const HEADER_LOVE_NOTE_MAX_CHARS = 58;
-
-function truncateAtWord(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text;
-  const cut = text.slice(0, maxChars);
-  const lastSpace = cut.lastIndexOf(' ');
-  const trimmed = (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(/[\s,.;:!?—-]+$/u, '');
-  return `${trimmed}…`;
-}
-
 function routeChain(duty: Duty): string { return sectorRoute(duty.sectors); }
+
+// Pixels per second the marquee scrolls at, and the gap between the looped repeat.
+const MARQUEE_PX_PER_SEC = 55;
+const MARQUEE_GAP = 36;
+
+/**
+ * A single-line note that, if it doesn't fit, scrolls continuously instead of wrapping or
+ * truncating -- nothing is ever cut off, it just takes a few seconds to read. A short note
+ * that already fits renders as a perfectly static Text with no animation at all. The loop is
+ * seamless: a second copy of the text sits MARQUEE_GAP past the first, so by the time the
+ * first copy has scrolled its own width + the gap off-screen, the second copy is exactly
+ * where the first one started -- Animated.loop's instant reset to 0 is invisible.
+ */
+function MarqueeText({ text, textStyle, color }: { text: string; textStyle: object; color: string }) {
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [contentWidth, setContentWidth] = useState(0);
+  const translateX = useRef(new Animated.Value(0)).current;
+  const overflowing = containerWidth > 0 && contentWidth > containerWidth + 1;
+
+  useEffect(() => {
+    if (!overflowing) return;
+    const distance = contentWidth + MARQUEE_GAP;
+    translateX.setValue(0);
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.delay(1500),
+        Animated.timing(translateX, { toValue: -distance, duration: (distance / MARQUEE_PX_PER_SEC) * 1000, easing: Easing.linear, useNativeDriver: true, isInteraction: false }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [overflowing, contentWidth, translateX]);
+
+  return <View style={styles.marqueeWrap} onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}>
+    <Animated.View style={[styles.marqueeRow, overflowing ? { transform: [{ translateX }] } : undefined]}>
+      <Text numberOfLines={1} onLayout={(event) => setContentWidth(event.nativeEvent.layout.width)} style={[textStyle, { color, flexShrink: 0 }]}>{text}</Text>
+      {overflowing && <Text numberOfLines={1} style={[textStyle, { color, flexShrink: 0, marginLeft: MARQUEE_GAP }]}>{text}</Text>}
+    </Animated.View>
+  </View>;
+}
 function arrivalForecastDate(duty: Duty): string | undefined {
   const last = duty.sectors.at(-1);
   return duty.releaseDate ?? last?.date ?? duty.date;
@@ -936,12 +962,13 @@ function operatingCount(roster: ParsedAirAstanaRoster) { return roster.sectors.f
 
 const styles = StyleSheet.create({
   safe: { flex: 1 }, app: { flex: 1, width: '100%', maxWidth: 620, alignSelf: 'center', paddingHorizontal: 16 },
-  header: { minHeight: 72, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, headerText: { flex: 1, minWidth: 0, marginRight: 10 }, brand: { fontSize: 27, fontWeight: '700', letterSpacing: -.8 }, brandWord: { flexDirection: 'row', alignItems: 'baseline' }, vHeartMark: { width: 25, height: 31, alignItems: 'center', justifyContent: 'center' }, vHeartGlyph: { fontSize: 25, lineHeight: 31, fontWeight: '700' }, kicker: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
+  header: { height: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, headerText: { flex: 1, minWidth: 0, marginRight: 10 }, brand: { fontSize: 27, fontWeight: '700', letterSpacing: -.8 }, brandWord: { flexDirection: 'row', alignItems: 'baseline' }, vHeartMark: { width: 25, height: 31, alignItems: 'center', justifyContent: 'center' }, vHeartGlyph: { fontSize: 25, lineHeight: 31, fontWeight: '700' }, kicker: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
   // Wraps to a 2nd line instead of single-line-ellipsis: CSS ellipsis truncates by raw
   // character count regardless of word boundaries, which reads sloppily on a random phrase
   // ("...ЛЮБИМЫМ ТОБ…"). Wrapping breaks at spaces like any normal text flow, so the rare
   // phrase too long even for 2 lines still only ever loses whole words, never half of one.
   headerLoveNote: { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: .9, textTransform: 'uppercase' },
+  marqueeWrap: { overflow: 'hidden', alignItems: 'flex-start' }, marqueeRow: { flexDirection: 'row' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   modeButton: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }, modeGlyph: { fontSize: 19 }, modeGlyphPair: { fontSize: 13, letterSpacing: -3 },
   viewport: { flex: 1, minHeight: 0 }, screen: { flex: 1, paddingTop: 8, gap: 12 }, grow: { flex: 1, minWidth: 0 },
