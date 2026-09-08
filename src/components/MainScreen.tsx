@@ -57,6 +57,73 @@ const WEB_TAB_GLASS_LOVED = Platform.OS === 'web'
 const WEB_SHEET_GLASS_LOVED = Platform.OS === 'web'
   ? ({ backdropFilter: 'blur(28px) saturate(1.4)', WebkitBackdropFilter: 'blur(28px) saturate(1.4)' } as any)
   : undefined;
+
+/**
+ * "Liquid glass" material -- Special Mode only. Kept within the 12-20px blur band a mid-range
+ * phone can hold at 60fps (this file's other, older glass recipes go up to 32px; those predate
+ * this budget and are left alone rather than churned as part of this change). `contain` and the
+ * combined inset+outer `boxShadow` are raw CSS passthroughs (same `as any` escape hatch already
+ * used above for backdropFilter) -- native platforms just ignore unknown style keys, and this
+ * app only ships as a web PWA anyway, so there's no real fallback path to write beyond that.
+ */
+const LIQUID_GLASS_BASE = Platform.OS === 'web' ? ({
+  backdropFilter: 'blur(18px) saturate(1.8)',
+  WebkitBackdropFilter: 'blur(18px) saturate(1.8)',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,.4), 0 15px 35px rgba(0,0,0,.25)',
+  contain: 'layout style paint',
+} as any) : undefined;
+const LIQUID_GLASS_BORDER = 'rgba(255,255,255,.16)';
+const LIQUID_SHEEN_BG = Platform.OS === 'web' ? ({
+  background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,.35) 0%, transparent 65%)',
+  mixBlendMode: 'soft-light',
+  willChange: 'transform',
+} as any) : undefined;
+const LIQUID_RIM_BG = Platform.OS === 'web' ? ({
+  background: 'linear-gradient(135deg, rgba(255,255,255,.25) 0%, transparent 40%, transparent 70%, rgba(0,0,0,.08) 100%)',
+} as any) : undefined;
+const LIQUID_SHEEN_LEG_MS = 9000;
+
+/**
+ * The moving "fluid" shimmer -- a radial highlight that drifts/rotates/scales in an endless
+ * there-and-back loop (Animated.loop around a forward-then-reverse sequence is this codebase's
+ * equivalent of CSS's `animation-direction: alternate`, since RN has no such keyword). Driven
+ * entirely by `transform` via `useNativeDriver: true` so it never touches layout -- no
+ * top/left/width/height in the animated values, matching the spec's own 60fps constraint.
+ * `radius` only affects the static rim layer beneath it; the sheen itself is a plain rectangle
+ * clipped by the card's own `overflow: 'hidden'`, same as the rim.
+ */
+function LiquidSheen({ radius, animated = true }: { radius: number; animated?: boolean }) {
+  const t = useRef(new Animated.Value(0)).current;
+  // The sheen's own oversized (180%) box is sized in real px once it's laid out. translateX/Y
+  // are keyed off that measured size (in px) rather than percentage strings -- verified via a
+  // live DOM check that RN-Web's native-driver transform interpolation silently freezes on a
+  // percentage-string translateX/Y output (the static 180%/-40% *sizing* percentages work fine;
+  // it's specifically an animated percentage *translate* that never advances past frame one).
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    if (!animated || !size.width || !size.height) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(t, { toValue: 1, duration: LIQUID_SHEEN_LEG_MS, easing: Easing.inOut(Easing.ease), useNativeDriver: true, isInteraction: false }),
+        Animated.timing(t, { toValue: 0, duration: LIQUID_SHEEN_LEG_MS, easing: Easing.inOut(Easing.ease), useNativeDriver: true, isInteraction: false }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [animated, size.width, size.height, t]);
+
+  return <>
+    {animated && <Animated.View pointerEvents="none" onLayout={(event) => setSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })} style={[styles.liquidSheenLayer, LIQUID_SHEEN_BG, {
+      transform: [
+        { translateX: t.interpolate({ inputRange: [0, .5, 1], outputRange: [-0.15 * size.width, 0.05 * size.width, 0.15 * size.width] }) },
+        { translateY: t.interpolate({ inputRange: [0, .5, 1], outputRange: [-0.15 * size.height, 0.10 * size.height, -0.05 * size.height] }) },
+        { rotate: t.interpolate({ inputRange: [0, .5, 1], outputRange: ['0deg', '5deg', '-5deg'] }) },
+        { scale: t.interpolate({ inputRange: [0, .5, 1], outputRange: [1, 1.05, .95] }) },
+      ],
+    }]} />}
+    <View pointerEvents="none" style={[styles.liquidRimLayer, LIQUID_RIM_BG, { borderRadius: radius }]} />
+  </>;
+}
 /**
  * All shadow* props must live in the same style object — react-native-web derives a single
  * boxShadow per object, so splitting shadowColor into a separate object in the style array
@@ -331,6 +398,9 @@ export default function MainScreen() {
         }}
         style={[styles.tabBar, styles.depthSurface, palette.tabGlass ?? WEB_TAB_GLASS, { backgroundColor: palette.surface, borderColor: palette.line }]}
       >
+        {/* Rim only, no shimmer -- this bar is interactive chrome the viewer looks at on every
+            tab change, not a card to admire; a moving highlight here would just be distracting. */}
+        {palette.tabGlass && <LiquidSheen radius={22} animated={false} />}
         {tabBarWidth > 0 && <Animated.View pointerEvents="none" style={[styles.tabSelection, { width: Math.max(0, tabStep - 8), backgroundColor: palette.surfaceStrong, transform: [{ translateX: tabIndicatorX }] }]} />}
         {TABS.map((item) => {
           const active = item === tab;
@@ -458,8 +528,9 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onLovePhrase, onImp
         onPressIn={() => Animated.spring(heroPressScale, { toValue: 0.986, stiffness: 560, damping: 34, mass: 0.42, useNativeDriver: true, isInteraction: false }).start()}
         onPressOut={() => Animated.spring(heroPressScale, { toValue: 1, stiffness: 420, damping: 25, mass: 0.52, useNativeDriver: true, isInteraction: false }).start()}
         onPress={() => { softHaptic(); setCrewOpen(true); }}
-        style={[styles.heroCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
+        style={[styles.heroCard, styles.depthSurface, palette.cardGlass, palette.cardGlass && LIQUID_GLASS_BASE, { backgroundColor: palette.surfaceStrong, borderColor: palette.cardGlass ? LIQUID_GLASS_BORDER : palette.line }]}
       >
+        {palette.cardGlass && <LiquidSheen radius={26} />}
         <View style={styles.heroTopRow}>
           <ScrollableRouteText text={routeChain(duty)} textStyle={styles.heroRoute} color={palette.text} cardBackground={palette.surfaceStrong} />
           <View style={[styles.dutyPill, { backgroundColor: palette.accentSoft, borderColor: palette.line }]}>
@@ -491,7 +562,10 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onLovePhrase, onImp
       <Summary title="NIGHT HOURS" value={formatMinutes(night)} detail={nightShare === undefined ? 'reported by the roster' : `${nightShare}% of block time`} palette={palette} />
     </View>
 
-    {neighbours.length > 0 && <View style={styles.upNext}>
+    {neighbours.length > 0 && <View style={[styles.upNext, palette.cardGlass && styles.upNextGlassPanel, palette.cardGlass && LIQUID_GLASS_BASE, palette.cardGlass && { backgroundColor: palette.surface, borderColor: LIQUID_GLASS_BORDER }]}>
+      {/* Static rim only, not the animated sheen -- a moving shimmer behind several rows of
+          read-heavy text (dates, routes, times) would be a distraction, not a highlight. */}
+      {palette.cardGlass && <LiquidSheen radius={20} animated={false} />}
       <Text style={[styles.label, { color: palette.muted }]}>PREVIOUS FLIGHTS</Text>
       <FlatList data={neighbours} keyExtractor={(item) => item.duty.id} showsVerticalScrollIndicator={false} style={styles.upNextList}
         renderItem={({ item }) => <View style={[styles.upNextRow, { borderColor: palette.line }]}>
@@ -961,7 +1035,14 @@ function forecastDayLabel(value: string): string {
   return `${weekday} ${day}`;
 }
 function PrimaryButton({ title, onPress, loading, palette }: { title: string; onPress: () => void; loading: boolean; palette: Palette }) { return <Pressable onPress={onPress} disabled={loading} style={[styles.primaryButton, { backgroundColor: palette.accent }]}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionText}>{title}</Text>}</Pressable>; }
-function Summary({ title, value, detail, palette }: { title: string; value: string; detail: string; palette: Palette }) { return <View style={[styles.summary, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.label, { color: palette.muted }]}>{title}</Text><Text style={[styles.summaryValue, { color: palette.text }]}>{value}</Text><Text style={[styles.meta, { color: palette.muted }]}>{detail}</Text></View>; }
+function Summary({ title, value, detail, palette }: { title: string; value: string; detail: string; palette: Palette }) {
+  return <View style={[styles.summary, styles.depthSurface, palette.cardGlass, palette.cardGlass && LIQUID_GLASS_BASE, { backgroundColor: palette.surface, borderColor: palette.cardGlass ? LIQUID_GLASS_BORDER : palette.line }]}>
+    {palette.cardGlass && <LiquidSheen radius={20} />}
+    <Text style={[styles.label, { color: palette.muted }]}>{title}</Text>
+    <Text style={[styles.summaryValue, { color: palette.text }]}>{value}</Text>
+    <Text style={[styles.meta, { color: palette.muted }]}>{detail}</Text>
+  </View>;
+}
 function InfoCard({ title, children, palette }: { title: string; children: React.ReactNode; palette: Palette }) { return <View style={[styles.infoCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}><Text style={[styles.cardTitle, { color: palette.text }]}>{title}</Text>{children}</View>; }
 function operatingCount(roster: ParsedAirAstanaRoster) { return roster.sectors.filter((sector) => !sector.deadhead).length; }
 
@@ -983,7 +1064,9 @@ const styles = StyleSheet.create({
   moreScroll: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   moreScrollContent: { paddingTop: 8, paddingBottom: 16, gap: 12 }, grow: { flex: 1, minWidth: 0 },
   sectionTitle: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.8 }, intro: { fontSize: 15, lineHeight: 22 }, label: { fontSize: 11, fontWeight: '700', letterSpacing: .9 }, meta: { fontSize: 13, lineHeight: 18 },
-  heroCard: { borderWidth: 1, borderRadius: 26, padding: 16 },
+  heroCard: { borderWidth: 1, borderRadius: 26, padding: 16, overflow: 'hidden' },
+  liquidSheenLayer: { position: 'absolute', left: '-40%', top: '-40%', width: '180%', height: '180%' },
+  liquidRimLayer: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   heroRoute: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.7 },
   routeScrollWrap: { flex: 1, minWidth: 0, overflow: 'hidden' }, routeScroll: { flexGrow: 0 }, routeScrollContent: { flexGrow: 0 },
@@ -996,8 +1079,8 @@ const styles = StyleSheet.create({
   heroFoot: { fontSize: 13, fontWeight: '600', marginTop: 12 },
   weatherRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }, weatherIcon: { fontSize: 16 }, weatherTemp: { fontSize: 14, fontWeight: '800' }, weatherMeta: { flex: 1, fontSize: 11.5, fontWeight: '600' },
   forecastPopup: { width: '88%', maxWidth: 340, borderWidth: 1, borderRadius: 22, padding: 18 }, forecastList: { marginTop: 10, gap: 6 }, forecastLine: { flexDirection: 'row', alignItems: 'center', gap: 8 }, forecastDay: { width: 42, fontWeight: '700' }, forecastLabel: { flex: 1 }, forecastTemp: { fontWeight: '700', fontVariant: ['tabular-nums'] }, forecastStateRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }, forecastRetry: { marginTop: 6, paddingVertical: 4 },
-  summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14 }, summaryValue: { fontSize: 28, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] },
-  upNext: { flex: 1, minHeight: 0, gap: 2 }, upNextList: { flex: 1 }, upNextRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
+  summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14, overflow: 'hidden' }, summaryValue: { fontSize: 28, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] },
+  upNext: { flex: 1, minHeight: 0, gap: 2 }, upNextGlassPanel: { borderWidth: 1, borderRadius: 20, padding: 14, overflow: 'hidden' }, upNextList: { flex: 1 }, upNextRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
   upNextDate: { fontSize: 12, fontWeight: '700', letterSpacing: .4, width: 54 }, upNextRoute: { flex: 1, fontSize: 15, fontWeight: '600' }, upNextTimeBlock: { minWidth: 72, alignItems: 'flex-end' }, upNextTimeLabel: { fontSize: 8, lineHeight: 10, fontWeight: '700', letterSpacing: .45, marginBottom: 1 }, upNextTime: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
   primaryButton: { height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }, actionText: { color: '#fff', fontWeight: '700' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, titleActions: { flexDirection: 'row', gap: 7 }, compactButton: { height: 38, minWidth: 72, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 }, compactText: { fontWeight: '700', fontSize: 12 },
