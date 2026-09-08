@@ -57,6 +57,47 @@ const WEB_TAB_GLASS_LOVED = Platform.OS === 'web'
 const WEB_SHEET_GLASS_LOVED = Platform.OS === 'web'
   ? ({ backdropFilter: 'blur(28px) saturate(1.4)', WebkitBackdropFilter: 'blur(28px) saturate(1.4)' } as any)
   : undefined;
+
+/**
+ * Warm "Liquid Glass" material system -- Special Mode only, matching the Kha♥air redesign
+ * brief. Every surface uses one of three densities (soft/standard/hero) so the optical feel
+ * stays consistent instead of each card inventing its own translucency. RN has no CSS custom
+ * properties or pseudo-elements, so these are plain JS recipes (the `as any` cast is the same
+ * escape hatch already used above for backdropFilter) and the "reflection" highlight each
+ * surface wants is a real sibling View (see heroSheen) rather than a ::before.
+ */
+const glassRecipe = (topAlpha: number, bottomAlpha: number, blur: number, saturate: number) => Platform.OS === 'web'
+  ? ({
+      background: `linear-gradient(145deg, rgba(255,255,255,${topAlpha}), rgba(255,246,239,${bottomAlpha}))`,
+      backdropFilter: `blur(${blur}px) saturate(${saturate})`,
+      WebkitBackdropFilter: `blur(${blur}px) saturate(${saturate})`,
+    } as any)
+  : undefined;
+const GLASS_LOVED = {
+  hero: glassRecipe(.54, .30, 26, 1.4),
+  standard: glassRecipe(.46, .24, 20, 1.3),
+  soft: glassRecipe(.34, .16, 14, 1.2),
+};
+const GLASS_BORDER_LOVED = { hero: 'rgba(255,255,255,.68)', standard: 'rgba(255,255,255,.55)', soft: 'rgba(255,255,255,.42)' };
+// Layered atmospheric wash behind the whole screen, replacing the flat background color.
+// Kept subtle (per the brief: "must still be able to read all content instantly") and
+// swapped for a warmer, darker version rather than reused verbatim in dark theme.
+const ATMOSPHERE_LOVED_LIGHT = Platform.OS === 'web' ? ({
+  background: [
+    'radial-gradient(circle at 82% 8%, rgba(255,245,234,.9), transparent 30%)',
+    'radial-gradient(circle at 50% 34%, rgba(255,183,160,.32), transparent 38%)',
+    'radial-gradient(circle at 10% 80%, rgba(242,159,148,.18), transparent 35%)',
+    'linear-gradient(180deg, #F9DDD5 0%, #F4CEC5 55%, #F7D7CE 100%)',
+  ].join(', '),
+} as any) : undefined;
+const ATMOSPHERE_LOVED_DARK = Platform.OS === 'web' ? ({
+  background: [
+    'radial-gradient(circle at 82% 8%, rgba(255,180,150,.10), transparent 30%)',
+    'radial-gradient(circle at 50% 34%, rgba(255,154,122,.14), transparent 40%)',
+    'radial-gradient(circle at 10% 80%, rgba(255,107,106,.10), transparent 38%)',
+    'linear-gradient(180deg, #2B1F1B 0%, #241916 55%, #2B1F1B 100%)',
+  ].join(', '),
+} as any) : undefined;
 /**
  * All shadow* props must live in the same style object — react-native-web derives a single
  * boxShadow per object, so splitting shadowColor into a separate object in the style array
@@ -297,7 +338,8 @@ export default function MainScreen() {
     setTab('Home');
   };
 
-  return <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]} edges={desktopWeb ? ['bottom'] : ['top', 'bottom']}>
+  const atmosphere = lovedMode ? (dark ? ATMOSPHERE_LOVED_DARK : ATMOSPHERE_LOVED_LIGHT) : undefined;
+  return <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }, atmosphere]} edges={desktopWeb ? ['bottom'] : ['top', 'bottom']}>
     <View style={styles.app}>
       <View style={styles.header}>
         <View style={styles.headerText}>
@@ -315,10 +357,10 @@ export default function MainScreen() {
             : <Text style={[styles.kicker, { color: palette.muted }]}>CABIN CREW COMPANION</Text>}
         </View>
         <View style={styles.headerActions}>
-          {lovedMode && <Pressable onPress={toggleTheme} style={[styles.modeButton, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface }]} accessibilityRole="button" accessibilityLabel={themeOverride === undefined ? 'Switch to light theme' : themeOverride === 'light' ? 'Switch to dark theme' : 'Switch to system theme'}>
+          {lovedMode && <Pressable onPress={toggleTheme} style={[styles.modeButton, styles.depthSurface, GLASS_LOVED.standard, { backgroundColor: palette.surface, borderColor: GLASS_BORDER_LOVED.standard, borderWidth: 1 }]} accessibilityRole="button" accessibilityLabel={themeOverride === undefined ? 'Switch to light theme' : themeOverride === 'light' ? 'Switch to dark theme' : 'Switch to system theme'}>
             <Text style={[styles.modeGlyph, themeOverride === undefined && styles.modeGlyphPair]}>{themeOverride === undefined ? '🍑🍒' : themeOverride === 'dark' ? '🍑' : '🍒'}</Text>
           </Pressable>}
-          <Pressable onPress={requestLovedMode} style={[styles.modeButton, { backgroundColor: lovedMode ? palette.accentSoft : palette.surface, borderColor: lovedMode ? palette.rose : 'transparent', borderWidth: lovedMode ? 1 : 0 }]} accessibilityLabel="Special mode">
+          <Pressable onPress={requestLovedMode} style={[styles.modeButton, lovedMode && styles.depthSurface, lovedMode ? GLASS_LOVED.standard : undefined, { backgroundColor: lovedMode ? palette.accentSoft : palette.surface, borderColor: lovedMode ? GLASS_BORDER_LOVED.standard : 'transparent', borderWidth: lovedMode ? 1 : 0 }]} accessibilityLabel="Special mode">
             <Text style={styles.modeGlyph}>{lovedMode ? '🌹' : '♡'}</Text>
           </Pressable>
         </View>
@@ -336,9 +378,9 @@ export default function MainScreen() {
           const nextWidth = event.nativeEvent.layout.width;
           if (Math.abs(nextWidth - tabBarWidth) > 0.5) setTabBarWidth(nextWidth);
         }}
-        style={[styles.tabBar, styles.depthSurface, palette.tabGlass ?? WEB_TAB_GLASS, { backgroundColor: palette.surface, borderColor: palette.line }]}
+        style={[styles.tabBar, styles.depthSurface, lovedMode ? GLASS_LOVED.hero : (palette.tabGlass ?? WEB_TAB_GLASS), { backgroundColor: palette.surface, borderColor: lovedMode ? GLASS_BORDER_LOVED.hero : palette.line }]}
       >
-        {tabBarWidth > 0 && <Animated.View pointerEvents="none" style={[styles.tabSelection, { width: Math.max(0, tabStep - 8), backgroundColor: palette.surfaceStrong, transform: [{ translateX: tabIndicatorX }] }]} />}
+        {tabBarWidth > 0 && <Animated.View pointerEvents="none" style={[styles.tabSelection, { width: Math.max(0, tabStep - 8), backgroundColor: palette.surfaceStrong, borderColor: lovedMode ? GLASS_BORDER_LOVED.soft : 'transparent', borderWidth: lovedMode ? 1 : 0, transform: [{ translateX: tabIndicatorX }] }]} />}
         {TABS.map((item) => {
           const active = item === tab;
           return <Pressable key={item} onPress={() => goToTab(item)} style={styles.tabItem} accessibilityRole="tab" accessibilityState={{ selected: active }}>
@@ -467,12 +509,13 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onLovePhrase, onImp
         onPressIn={() => Animated.spring(heroPressScale, { toValue: 0.986, stiffness: 560, damping: 34, mass: 0.42, useNativeDriver: true, isInteraction: false }).start()}
         onPressOut={() => Animated.spring(heroPressScale, { toValue: 1, stiffness: 420, damping: 25, mass: 0.52, useNativeDriver: true, isInteraction: false }).start()}
         onPress={() => { softHaptic(); setCrewOpen(true); }}
-        style={[styles.heroCard, palette.cardGlass ? heroGlassShadow(palette) : styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.cardGlass ? 'rgba(255,255,255,.4)' : palette.line }]}
+        style={[styles.heroCard, palette.cardGlass ? heroGlassShadow(palette) : styles.depthSurface, palette.cardGlass && GLASS_LOVED.hero, { backgroundColor: palette.surfaceStrong, borderColor: palette.cardGlass ? GLASS_BORDER_LOVED.hero : palette.line }]}
       >
         {palette.cardGlass && <View pointerEvents="none" style={[styles.heroSheen, { background: 'linear-gradient(to bottom, rgba(255,255,255,.30), rgba(255,255,255,0))' } as any]} />}
         <View style={styles.heroTopRow}>
+          {palette.cardGlass && <View style={[styles.heroPlaneBubble, GLASS_LOVED.standard, { backgroundColor: palette.accentSoft, borderColor: GLASS_BORDER_LOVED.standard }]}><Text style={styles.heroPlaneGlyph}>✈️</Text></View>}
           <ScrollableRouteText text={routeChain(duty)} textStyle={styles.heroRoute} color={palette.text} cardBackground={palette.surfaceStrong} />
-          <View style={[styles.dutyPill, { backgroundColor: palette.accentSoft, borderColor: palette.line }]}>
+          <View style={[styles.dutyPill, palette.cardGlass && GLASS_LOVED.soft, { backgroundColor: palette.accentSoft, borderColor: palette.cardGlass ? GLASS_BORDER_LOVED.soft : palette.line }]}>
             <Text numberOfLines={1} style={[styles.dutyPillDate, { color: palette.muted }]}>{dutyStateLabel} · {duty.dateLabel}</Text>
             {countdown && <Text numberOfLines={1} style={[styles.dutyPillValue, { color: palette.text }]}>{countdown}</Text>}
             {countdown && <Text numberOfLines={1} style={[styles.dutyPillLabel, { color: isActive ? palette.accent : palette.muted }]}>{dutyStatusWord}</Text>}
@@ -498,14 +541,14 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onLovePhrase, onImp
 
     <Text style={[styles.label, { color: palette.muted }]}>{rosterMonthLabel(roster)}</Text>
     <View style={styles.summaryRow}>
-      <Summary title="BLOCK HOURS" value={formatMinutes(block)} detail={`${operatingCount(roster)} sectors flown`} palette={palette} />
-      <Summary title="NIGHT HOURS" value={formatMinutes(night)} detail={nightShare === undefined ? 'reported by the roster' : `${nightShare}% of block time`} palette={palette} />
+      <Summary title="BLOCK HOURS" icon="📊" value={formatMinutes(block)} detail={`${operatingCount(roster)} sectors flown`} palette={palette} />
+      <Summary title="NIGHT HOURS" icon="🌙" value={formatMinutes(night)} detail={nightShare === undefined ? 'reported by the roster' : `${nightShare}% of block time`} palette={palette} />
     </View>
 
     {neighbours.length > 0 && <View style={styles.upNext}>
       <Text style={[styles.label, { color: palette.muted }]}>PREVIOUS FLIGHTS</Text>
       <FlatList data={neighbours} keyExtractor={(item) => item.duty.id} showsVerticalScrollIndicator={false} style={styles.upNextList}
-        renderItem={({ item }) => <View style={[styles.upNextRow, { borderColor: palette.line }]}>
+        renderItem={({ item }) => <View style={[styles.upNextRow, palette.cardGlass && [styles.upNextRowGlass, GLASS_LOVED.soft], { borderColor: palette.cardGlass ? GLASS_BORDER_LOVED.soft : palette.line, backgroundColor: palette.cardGlass ? palette.surface : undefined }]}>
           <Text style={[styles.upNextDate, { color: palette.muted }]}>{item.duty.dateLabel}</Text>
           <Text numberOfLines={1} style={[styles.upNextRoute, { color: palette.text }]}>{routeChain(item.duty)}</Text>
           <View style={styles.upNextTimeBlock}>
@@ -972,7 +1015,14 @@ function forecastDayLabel(value: string): string {
   return `${weekday} ${day}`;
 }
 function PrimaryButton({ title, onPress, loading, palette }: { title: string; onPress: () => void; loading: boolean; palette: Palette }) { return <Pressable onPress={onPress} disabled={loading} style={[styles.primaryButton, { backgroundColor: palette.accent }]}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionText}>{title}</Text>}</Pressable>; }
-function Summary({ title, value, detail, palette }: { title: string; value: string; detail: string; palette: Palette }) { return <View style={[styles.summary, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surface, borderColor: palette.line }]}><Text style={[styles.label, { color: palette.muted }]}>{title}</Text><Text style={[styles.summaryValue, { color: palette.text }]}>{value}</Text><Text style={[styles.meta, { color: palette.muted }]}>{detail}</Text></View>; }
+function Summary({ title, icon, value, detail, palette }: { title: string; icon: string; value: string; detail: string; palette: Palette }) {
+  return <View style={[styles.summary, styles.depthSurface, palette.cardGlass && GLASS_LOVED.standard, { backgroundColor: palette.surface, borderColor: palette.cardGlass ? GLASS_BORDER_LOVED.standard : palette.line }]}>
+    <View style={[styles.summaryIconWell, palette.cardGlass && GLASS_LOVED.soft, { backgroundColor: palette.accentSoft, borderColor: palette.cardGlass ? GLASS_BORDER_LOVED.soft : 'transparent', borderWidth: palette.cardGlass ? 1 : 0 }]}><Text style={styles.summaryIconGlyph}>{icon}</Text></View>
+    <Text style={[styles.label, { color: palette.muted }]}>{title}</Text>
+    <Text style={[styles.summaryValue, { color: palette.text }]}>{value}</Text>
+    <Text style={[styles.meta, { color: palette.muted }]}>{detail}</Text>
+  </View>;
+}
 function InfoCard({ title, children, palette }: { title: string; children: React.ReactNode; palette: Palette }) { return <View style={[styles.infoCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}><Text style={[styles.cardTitle, { color: palette.text }]}>{title}</Text>{children}</View>; }
 function operatingCount(roster: ParsedAirAstanaRoster) { return roster.sectors.filter((sector) => !sector.deadhead).length; }
 
@@ -999,6 +1049,7 @@ const styles = StyleSheet.create({
   heroCard: { borderWidth: 1, borderRadius: 26, padding: 16, overflow: 'hidden' },
   heroSheen: { position: 'absolute', left: 0, right: 0, top: 0, height: 70 },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  heroPlaneBubble: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center' }, heroPlaneGlyph: { fontSize: 16 },
   heroRoute: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.7 },
   routeScrollWrap: { flex: 1, minWidth: 0, overflow: 'hidden' }, routeScroll: { flexGrow: 0 }, routeScrollContent: { flexGrow: 0 },
   routeFadeLeft: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 20 }, routeFadeRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 20 },
@@ -1011,7 +1062,9 @@ const styles = StyleSheet.create({
   weatherRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }, weatherIcon: { fontSize: 16 }, weatherTemp: { fontSize: 14, fontWeight: '800' }, weatherMeta: { flex: 1, fontSize: 11.5, fontWeight: '600' },
   forecastPopup: { width: '88%', maxWidth: 340, borderWidth: 1, borderRadius: 22, padding: 18 }, forecastList: { marginTop: 10, gap: 6 }, forecastLine: { flexDirection: 'row', alignItems: 'center', gap: 8 }, forecastDay: { width: 42, fontWeight: '700' }, forecastLabel: { flex: 1 }, forecastTemp: { fontWeight: '700', fontVariant: ['tabular-nums'] }, forecastStateRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }, forecastRetry: { marginTop: 6, paddingVertical: 4 },
   summaryRow: { flexDirection: 'row', gap: 10 }, summary: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14 }, summaryValue: { fontSize: 28, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] },
+  summaryIconWell: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginBottom: 8 }, summaryIconGlyph: { fontSize: 15 },
   upNext: { flex: 1, minHeight: 0, gap: 2 }, upNextList: { flex: 1 }, upNextRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
+  upNextRowGlass: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, marginBottom: 8, borderBottomWidth: 0 },
   upNextDate: { fontSize: 12, fontWeight: '700', letterSpacing: .4, width: 54 }, upNextRoute: { flex: 1, fontSize: 15, fontWeight: '600' }, upNextTimeBlock: { minWidth: 72, alignItems: 'flex-end' }, upNextTimeLabel: { fontSize: 8, lineHeight: 10, fontWeight: '700', letterSpacing: .45, marginBottom: 1 }, upNextTime: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
   primaryButton: { height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }, actionText: { color: '#fff', fontWeight: '700' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, titleActions: { flexDirection: 'row', gap: 7 }, compactButton: { height: 38, minWidth: 72, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 }, compactText: { fontWeight: '700', fontSize: 12 },
