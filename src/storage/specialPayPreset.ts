@@ -17,6 +17,11 @@ const SPECIAL_MONTH_OVERRIDES: Record<string, PayMonthOverrides> = {
     paidHours: 95.43,
     sickAmountOverride: 73214.34,
   },
+  // Known factual August payroll values supplied with the payslip. Vacation pay for the one
+  // day off (23 Aug) is an average-earnings figure the roster cannot derive on its own.
+  '2026-08': {
+    vacationAmountOverride: 24368.33,
+  },
 };
 
 export function activateSpecialPayPreset(): void {
