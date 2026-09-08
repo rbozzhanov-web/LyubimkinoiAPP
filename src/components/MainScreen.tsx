@@ -63,6 +63,13 @@ const WEB_SHEET_GLASS_LOVED = Platform.OS === 'web'
  * (rather than merging shadow properties key-by-key) makes the later object's missing
  * offset/radius/opacity silently zero out the shadow instead of merging with the earlier one.
  */
+// Full replacement for depthSurface on the hero card in Special Mode -- swapped in, not
+// merged alongside it, for the same reason as the comment above: a warm shadow color needs
+// its own complete offset/opacity/radius/elevation set, or the merge footgun above zeroes
+// out whichever of those the normal depthSurface object would otherwise have supplied.
+const heroGlassShadow = (palette: Palette) => ({
+  shadowColor: palette.accent, shadowOffset: { width: 0, height: 14 }, shadowOpacity: .28, shadowRadius: 28, elevation: 9,
+});
 const todayGlow = (palette: Palette) => ({
   shadowColor: palette.accent, shadowOffset: { width: 0, height: 8 }, shadowOpacity: .32, shadowRadius: 20, elevation: 8,
 });
@@ -451,15 +458,18 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onLovePhrase, onImp
   const nightShare = block && night !== undefined ? Math.round((night / block) * 100) : undefined;
 
   return <View style={styles.screen}>
-    <Animated.View style={{ transform: [{ scale: heroPressScale }] }}>
+    <View style={styles.heroGlowWrap}>
+      {palette.cardGlass && <View pointerEvents="none" style={[styles.heroGlow, { background: `radial-gradient(60% 100% at 50% 30%, ${palette.accent}80 0%, ${palette.accent}00 72%)`, filter: 'blur(32px)' } as any]} />}
+      <Animated.View style={{ transform: [{ scale: heroPressScale }] }}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`View crew for ${routeChain(duty)}`}
         onPressIn={() => Animated.spring(heroPressScale, { toValue: 0.986, stiffness: 560, damping: 34, mass: 0.42, useNativeDriver: true, isInteraction: false }).start()}
         onPressOut={() => Animated.spring(heroPressScale, { toValue: 1, stiffness: 420, damping: 25, mass: 0.52, useNativeDriver: true, isInteraction: false }).start()}
         onPress={() => { softHaptic(); setCrewOpen(true); }}
-        style={[styles.heroCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}
+        style={[styles.heroCard, palette.cardGlass ? heroGlassShadow(palette) : styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.cardGlass ? 'rgba(255,255,255,.4)' : palette.line }]}
       >
+        {palette.cardGlass && <View pointerEvents="none" style={[styles.heroSheen, { background: 'linear-gradient(to bottom, rgba(255,255,255,.30), rgba(255,255,255,0))' } as any]} />}
         <View style={styles.heroTopRow}>
           <ScrollableRouteText text={routeChain(duty)} textStyle={styles.heroRoute} color={palette.text} cardBackground={palette.surfaceStrong} />
           <View style={[styles.dutyPill, { backgroundColor: palette.accentSoft, borderColor: palette.line }]}>
@@ -483,7 +493,8 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onLovePhrase, onImp
         </Text>
         <WeatherChip code={last.arrival} targetDate={forecastDate} palette={palette} />
       </Pressable>
-    </Animated.View>
+      </Animated.View>
+    </View>
 
     <Text style={[styles.label, { color: palette.muted }]}>{rosterMonthLabel(roster)}</Text>
     <View style={styles.summaryRow}>
@@ -983,7 +994,10 @@ const styles = StyleSheet.create({
   moreScroll: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   moreScrollContent: { paddingTop: 8, paddingBottom: 16, gap: 12 }, grow: { flex: 1, minWidth: 0 },
   sectionTitle: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.8 }, intro: { fontSize: 15, lineHeight: 22 }, label: { fontSize: 11, fontWeight: '700', letterSpacing: .9 }, meta: { fontSize: 13, lineHeight: 18 },
-  heroCard: { borderWidth: 1, borderRadius: 26, padding: 16 },
+  heroGlowWrap: { position: 'relative' },
+  heroGlow: { position: 'absolute', left: 20, right: 20, top: '35%', bottom: -26, borderRadius: 60 },
+  heroCard: { borderWidth: 1, borderRadius: 26, padding: 16, overflow: 'hidden' },
+  heroSheen: { position: 'absolute', left: 0, right: 0, top: 0, height: 70 },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   heroRoute: { fontSize: 27, lineHeight: 31, fontWeight: '700', letterSpacing: -.7 },
   routeScrollWrap: { flex: 1, minWidth: 0, overflow: 'hidden' }, routeScroll: { flexGrow: 0 }, routeScrollContent: { flexGrow: 0 },
