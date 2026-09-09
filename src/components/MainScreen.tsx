@@ -283,7 +283,7 @@ export default function MainScreen() {
     setImportError(undefined);
     setImporting(true);
     try {
-      const result = await openAimsWebArchiveFlow();
+      const result = await openAimsWebArchiveFlow(lovedMode);
       if (!result) return;
       const next = upsertStoredRoster(result.roster);
       setRosters(next);
