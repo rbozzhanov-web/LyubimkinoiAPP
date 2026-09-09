@@ -1,4 +1,4 @@
-import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
+import type { ParsedAirAstanaRoster, RosterHotelStay } from '@/src/import/parseAirAstanaRoster';
 import type { RosterSector } from '@/src/import/duties';
 
 export interface StationStay {
@@ -77,6 +77,19 @@ function localDifferenceMinutes(start: string, end: string): number | undefined 
   const a = toMinuteStamp(start);
   const b = toMinuteStamp(end);
   return a === undefined || b === undefined ? undefined : b - a;
+}
+
+/**
+ * Only populated when the active roster came from an AIMS Web Archive import; the PDF report
+ * has no hotel data. Prefers the dated stay for this exact layover, falling back to a
+ * station-directory entry (address/phone only, no check-in/out) for the same station.
+ */
+export function findHotelStay(roster: ParsedAirAstanaRoster | undefined, station: string, date: string): RosterHotelStay | undefined {
+  const hotels = roster?.hotels;
+  if (!hotels?.length) return undefined;
+  const stationCode = station.toUpperCase();
+  return hotels.find((item) => item.station === stationCode && item.date === date)
+    ?? hotels.find((item) => item.station === stationCode && !item.date);
 }
 
 export function formatStayDuration(minutes: number): string {
