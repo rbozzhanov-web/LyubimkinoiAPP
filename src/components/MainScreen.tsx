@@ -61,16 +61,22 @@ const WEB_SHEET_GLASS_LOVED = Platform.OS === 'web'
 /**
  * "Liquid glass" material -- Special Mode only. Kept within the 12-20px blur band a mid-range
  * phone can hold at 60fps (this file's other, older glass recipes go up to 32px; those predate
- * this budget and are left alone rather than churned as part of this change). `contain` and the
- * combined inset+outer `boxShadow` are raw CSS passthroughs (same `as any` escape hatch already
- * used above for backdropFilter) -- native platforms just ignore unknown style keys, and this
- * app only ships as a web PWA anyway, so there's no real fallback path to write beyond that.
+ * this budget and are left alone rather than churned as part of this change). The combined
+ * inset+outer `boxShadow` is a raw CSS passthrough (same `as any` escape hatch already used
+ * above for backdropFilter) -- native platforms just ignore unknown style keys, and this app
+ * only ships as a web PWA anyway, so there's no real fallback path to write beyond that.
+ *
+ * Deliberately no `contain: paint` here even though it would help compositor promotion: Safari
+ * clips `contain: paint` to the element's plain rectangular bounds regardless of border-radius,
+ * which squared off one corner of every glass card's rounded border on an actual iPhone (never
+ * showed up in Chromium testing). The cards already carry `overflow: 'hidden'`, which clips to
+ * the rounded border correctly in every engine, so this is the one guardrail from the original
+ * spec this file skips.
  */
 const LIQUID_GLASS_BASE = Platform.OS === 'web' ? ({
   backdropFilter: 'blur(18px) saturate(1.8)',
   WebkitBackdropFilter: 'blur(18px) saturate(1.8)',
   boxShadow: 'inset 0 1px 0 rgba(255,255,255,.4), 0 15px 35px rgba(0,0,0,.25)',
-  contain: 'layout style paint',
 } as any) : undefined;
 const LIQUID_GLASS_BORDER = 'rgba(255,255,255,.16)';
 const LIQUID_SHEEN_BG = Platform.OS === 'web' ? ({
@@ -960,14 +966,21 @@ function TimeCell({ label, value, palette }: { label: string; value: string; pal
 function ScrollableRouteText({ text, textStyle, color, cardBackground }: { text: string; textStyle: object; color: string; cardBackground: string }) {
   const [containerWidth, setContainerWidth] = useState(0);
   const [contentWidth, setContentWidth] = useState(0);
+  const [scrollX, setScrollX] = useState(0);
   const overflowing = containerWidth > 0 && contentWidth > containerWidth + 1;
+  // Only fade the edge that actually still hides text -- at scroll 0 there is nothing to the
+  // left, and at the far end there is nothing to the right, so showing both unconditionally
+  // (as long as the text overflows at all) dimmed the route's own first letters at rest.
+  const showLeftFade = overflowing && scrollX > 1;
+  const showRightFade = overflowing && scrollX < contentWidth - containerWidth - 1;
   return <View style={styles.routeScrollWrap} onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} bounces={false} style={styles.routeScroll} contentContainerStyle={styles.routeScrollContent}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} bounces={false} style={styles.routeScroll} contentContainerStyle={styles.routeScrollContent}
+      onScroll={(event) => setScrollX(event.nativeEvent.contentOffset.x)} scrollEventThrottle={16}>
       <Text numberOfLines={1} onLayout={(event) => setContentWidth(event.nativeEvent.layout.width)} style={[textStyle, { color, flexShrink: 0 }]}>{text}</Text>
     </ScrollView>
-    {overflowing && Platform.OS === 'web' && <>
-      <View pointerEvents="none" style={[styles.routeFadeLeft, { background: `linear-gradient(to right, ${cardBackground}, transparent)` } as any]} />
-      <View pointerEvents="none" style={[styles.routeFadeRight, { background: `linear-gradient(to left, ${cardBackground}, transparent)` } as any]} />
+    {Platform.OS === 'web' && <>
+      {showLeftFade && <View pointerEvents="none" style={[styles.routeFadeLeft, { background: `linear-gradient(to right, ${cardBackground}, transparent)` } as any]} />}
+      {showRightFade && <View pointerEvents="none" style={[styles.routeFadeRight, { background: `linear-gradient(to left, ${cardBackground}, transparent)` } as any]} />}
     </>}
   </View>;
 }
