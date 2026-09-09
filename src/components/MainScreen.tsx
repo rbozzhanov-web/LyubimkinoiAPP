@@ -37,25 +37,7 @@ type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'lin
   cardGlass?: any;
   tabGlass?: any;
   sheetGlass?: any;
-  backdropPhoto?: any;
 };
-// Special Mode only, web only: a fixed sky photo behind the whole app -- the frosted glass
-// cards (backdrop-filter blur over a translucent surface) were designed for exactly this, so
-// showing them over a real photo instead of a flat color is what actually makes the "liquid
-// glass" material read as glass. `backgroundColor` stays the plain palette color as a fallback
-// for the moment before the image decodes and for anywhere the image doesn't fully cover.
-const BACKDROP_PHOTO_LIGHT = Platform.OS === 'web' ? ({
-  backgroundImage: 'url(bg-special-light.webp)',
-  backgroundSize: 'cover',
-  backgroundPosition: 'center',
-  backgroundRepeat: 'no-repeat',
-} as any) : undefined;
-const BACKDROP_PHOTO_DARK = Platform.OS === 'web' ? ({
-  backgroundImage: 'url(bg-special-dark.webp)',
-  backgroundSize: 'cover',
-  backgroundPosition: 'center',
-  backgroundRepeat: 'no-repeat',
-} as any) : undefined;
 type RosterRow = { kind: 'flight'; key: string; sortKey: string; card: FlightCardGroup } | { kind: 'ground'; key: string; sortKey: string; event: GroundEvent };
 type RosterDuty = { roster: ParsedAirAstanaRoster; duty: Duty };
 type FocusDuty = RosterDuty & { reportMs: number; releaseMs: number };
@@ -284,7 +266,6 @@ export default function MainScreen() {
     cardGlass: lovedMode ? WEB_CARD_GLASS_LOVED : undefined,
     tabGlass: lovedMode ? WEB_TAB_GLASS_LOVED : undefined,
     sheetGlass: lovedMode ? WEB_SHEET_GLASS_LOVED : undefined,
-    backdropPhoto: lovedMode ? (dark ? BACKDROP_PHOTO_DARK : BACKDROP_PHOTO_LIGHT) : undefined,
   }), [dark, lovedMode]);
 
   useEffect(() => {
@@ -395,7 +376,7 @@ export default function MainScreen() {
     setTab('Home');
   };
 
-  return <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }, palette.backdropPhoto]} edges={desktopWeb ? ['bottom'] : ['top', 'bottom']}>
+  return <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]} edges={desktopWeb ? ['bottom'] : ['top', 'bottom']}>
     <View style={styles.app}>
       <View style={styles.header}>
         <View style={styles.headerText}>
