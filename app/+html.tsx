@@ -38,58 +38,18 @@ const APP_SHELL_CSS = `
   html * { scrollbar-width: none; -ms-overflow-style: none; }
   html *::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
   body { background: #F4F1EC; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
-  @media (prefers-color-scheme: dark) { body { background: #11110F; } }
 
   /*
-   * Special Mode's sunset-clouds wallpaper (see assets/backgrounds/README.md), rendered as a
-   * true DOM sibling of #root -- NOT a background on any element inside it, and NOT inside the
-   * React tree at all. #root carries a "transform: translateY(24px)" for the Dynamic Island
-   * cushion above; a CSS transform on an ancestor creates a new containing block for any
-   * "position: fixed" descendant, so a wallpaper placed inside #root can only ever be fixed
-   * relative to #root's own (24px-short, 24px-shifted) box, never the true physical viewport --
-   * that mismatch was the root cause of the flat peach strip this replaces. Living outside
-   * #root, "inset: 0" here really does mean the four physical screen edges on every device,
-   * with no hardcoded height or safe-area math and no reliance on document height.
-   *
-   * Special Mode detection is pure CSS: MainScreen's root View carries
-   * aria-label="KhaVair special mode" only while Special Mode is unlocked, and :has() is a
-   * live pseudo-class that re-evaluates as the DOM changes -- no JS wiring needed here, and it
-   * degrades to nothing (no image, fully transparent) the instant Special Mode turns off.
-   *
-   * Three background-image layers (first listed = topmost): an edge-darkening gradient keeps
-   * the header text and tab bar icons -- and the iOS status bar sitting directly on the photo
-   * now -- readable; a flat-color wash in the app's own Blush/Espresso tone mutes the photo's
-   * saturated sunset colors so it reads as a tinted backdrop instead of competing with the
-   * glass cards; the photo itself is bottom-most.
+   * Special Mode now uses the Kha♥air color system directly (Blush/Espresso
+   * background, Coral/Peach/Gold accents) via the app's own palette, so the
+   * shell only needs to match the app background behind #root/safe-area
+   * edges before hydration and during overscroll bounce.
    */
-  /*
-   * The base rule (Normal Mode, no photo) still carries a faint top-edge darkening: the status
-   * bar meta tag below is a single global value, so making it translucent for Special Mode's
-   * photo also switches Normal Mode's status bar icons to the light/white style everywhere,
-   * including over Normal Mode's own light cream background where white icons would otherwise
-   * be unreadable. This is the minimum fix for that, not a Normal Mode redesign.
-   */
-  #khavair-wallpaper { position: fixed; inset: 0; width: 100vw; height: 100dvh; z-index: -1; pointer-events: none; background-image: linear-gradient(to bottom, rgba(0,0,0,.32) 0%, rgba(0,0,0,0) 10%); background-size: cover; background-position: center top; background-repeat: no-repeat; }
-  body:has(#root [aria-label="KhaVair special mode"]) #khavair-wallpaper {
-    background-image:
-      linear-gradient(to bottom, rgba(43,31,27,.22) 0%, rgba(43,31,27,0) 14%, rgba(43,31,27,0) 84%, rgba(43,31,27,.24) 100%),
-      linear-gradient(rgba(255,230,225,.6), rgba(255,230,225,.6)),
-      url('backgrounds/light/khavair-bg-light-base_852x1847.webp');
-    background-size: cover, cover, cover;
-    background-position: center top, center top, center top;
-    background-repeat: no-repeat, no-repeat, no-repeat;
-  }
+  body:has(#root [aria-label="KhaVair special mode"]) { background: #FFE6E1; }
 
   @media (prefers-color-scheme: dark) {
-    body:has(#root [aria-label="KhaVair special mode"]) #khavair-wallpaper {
-      background-image:
-        linear-gradient(to bottom, rgba(0,0,0,.32) 0%, rgba(0,0,0,0) 14%, rgba(0,0,0,0) 84%, rgba(0,0,0,.34) 100%),
-        linear-gradient(rgba(43,31,27,.65), rgba(43,31,27,.65)),
-        url('backgrounds/dark/khavair-bg-dark-base_853x1844.webp');
-      background-size: cover, cover, cover;
-      background-position: center top, center top, center top;
-      background-repeat: no-repeat, no-repeat, no-repeat;
-    }
+    body { background: #11110F; }
+    body:has(#root [aria-label="KhaVair special mode"]) { background: #2B1F1B; }
   }
 `;
 
@@ -264,7 +224,7 @@ export default function Root({ children }: { children: ReactNode }) {
       <meta name="mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-title" content="KhaVair" />
-      <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+      <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       <meta name="format-detection" content="telephone=no" />
       <meta name="referrer" content="no-referrer" />
       <meta name="description" content="Private cabin crew roster, per diem and pay companion." />
@@ -277,12 +237,6 @@ export default function Root({ children }: { children: ReactNode }) {
       {headNodes}
     </head>
     <body {...bodyAttributes}>
-      {/*
-        A true sibling of #root, not a descendant -- see the #khavair-wallpaper comment in
-        APP_SHELL_CSS above for why that placement is load-bearing. Empty/transparent (no
-        background-image, so nothing paints) outside Special Mode.
-      */}
-      <div id="khavair-wallpaper" aria-hidden="true" />
       {children}
       {bodyNodes}
       <script dangerouslySetInnerHTML={{ __html: LOCK_ZOOM }} />
