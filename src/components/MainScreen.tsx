@@ -960,14 +960,21 @@ function TimeCell({ label, value, palette }: { label: string; value: string; pal
 function ScrollableRouteText({ text, textStyle, color, cardBackground }: { text: string; textStyle: object; color: string; cardBackground: string }) {
   const [containerWidth, setContainerWidth] = useState(0);
   const [contentWidth, setContentWidth] = useState(0);
+  const [scrollX, setScrollX] = useState(0);
   const overflowing = containerWidth > 0 && contentWidth > containerWidth + 1;
+  // Only fade the edge that actually still hides text -- at scroll 0 there is nothing to the
+  // left, and at the far end there is nothing to the right, so showing both unconditionally
+  // (as long as the text overflows at all) dimmed the route's own first letters at rest.
+  const showLeftFade = overflowing && scrollX > 1;
+  const showRightFade = overflowing && scrollX < contentWidth - containerWidth - 1;
   return <View style={styles.routeScrollWrap} onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} bounces={false} style={styles.routeScroll} contentContainerStyle={styles.routeScrollContent}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} bounces={false} style={styles.routeScroll} contentContainerStyle={styles.routeScrollContent}
+      onScroll={(event) => setScrollX(event.nativeEvent.contentOffset.x)} scrollEventThrottle={16}>
       <Text numberOfLines={1} onLayout={(event) => setContentWidth(event.nativeEvent.layout.width)} style={[textStyle, { color, flexShrink: 0 }]}>{text}</Text>
     </ScrollView>
-    {overflowing && Platform.OS === 'web' && <>
-      <View pointerEvents="none" style={[styles.routeFadeLeft, { background: `linear-gradient(to right, ${cardBackground}, transparent)` } as any]} />
-      <View pointerEvents="none" style={[styles.routeFadeRight, { background: `linear-gradient(to left, ${cardBackground}, transparent)` } as any]} />
+    {Platform.OS === 'web' && <>
+      {showLeftFade && <View pointerEvents="none" style={[styles.routeFadeLeft, { background: `linear-gradient(to right, ${cardBackground}, transparent)` } as any]} />}
+      {showRightFade && <View pointerEvents="none" style={[styles.routeFadeRight, { background: `linear-gradient(to left, ${cardBackground}, transparent)` } as any]} />}
     </>}
   </View>;
 }
