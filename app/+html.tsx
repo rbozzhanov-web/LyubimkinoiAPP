@@ -40,16 +40,27 @@ const APP_SHELL_CSS = `
   body { background: #F4F1EC; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
 
   /*
-   * Special Mode now uses the Kha♥air color system directly (Blush/Espresso
-   * background, Coral/Peach/Gold accents) via the app's own palette, so the
-   * shell only needs to match the app background behind #root/safe-area
-   * edges before hydration and during overscroll bounce.
+   * Special Mode's real backdrop is the sunset-clouds photo applied in
+   * MainScreen.tsx (Special Mode + web only, see the backdropPhoto palette
+   * field there and assets/backgrounds/README.md) -- the frosted glass cards
+   * were built to blur a real photo, not a flat color. This shell rule only
+   * covers #root/safe-area edges before hydration and during overscroll
+   * bounce, so it uses the same photo to avoid a flat-color flash.
    */
-  body:has(#root [aria-label="KhaVair special mode"]) { background: #FFE6E1; }
+  body:has(#root [aria-label="KhaVair special mode"]) {
+    background-color: #FFE6E1;
+    background-image: url('backgrounds/light/khavair-bg-light-base_852x1847.webp');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
 
   @media (prefers-color-scheme: dark) {
     body { background: #11110F; }
-    body:has(#root [aria-label="KhaVair special mode"]) { background: #2B1F1B; }
+    body:has(#root [aria-label="KhaVair special mode"]) {
+      background-color: #2B1F1B;
+      background-image: url('backgrounds/dark/khavair-bg-dark-base_853x1844.webp');
+    }
   }
 `;
 
