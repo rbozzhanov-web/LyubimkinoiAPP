@@ -376,17 +376,7 @@ export default function MainScreen() {
     setTab('Home');
   };
 
-  // Special Mode's real backdrop is a fixed, full-viewport wallpaper layer rendered in
-  // app/+html.tsx as a sibling of #root (see #khavair-wallpaper there for why: #root carries
-  // its own transform for the Dynamic Island cushion, and any position:fixed descendant of a
-  // transformed ancestor is scoped to that ancestor's box instead of the true viewport, so the
-  // wallpaper can only reach the physical screen edges by living outside #root entirely). This
-  // SafeAreaView must turn transparent for that to show through -- everything inside it (the
-  // header, hero card gaps, roster list gaps) is already transparent by default, so this is the
-  // only opaque fill standing between the viewer and the wallpaper.
-  const rootBackground = lovedMode && Platform.OS === 'web' ? 'transparent' : palette.background;
-
-  return <SafeAreaView style={[styles.safe, { backgroundColor: rootBackground }]} edges={desktopWeb ? ['bottom'] : ['top', 'bottom']}>
+  return <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]} edges={desktopWeb ? ['bottom'] : ['top', 'bottom']}>
     <View style={styles.app}>
       <View style={styles.header}>
         <View style={styles.headerText}>
