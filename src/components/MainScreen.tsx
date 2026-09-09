@@ -44,18 +44,22 @@ type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'lin
 // showing them over a real photo instead of a flat color is what actually makes the "liquid
 // glass" material read as glass. `backgroundColor` stays the plain palette color as a fallback
 // for the moment before the image decodes and for anywhere the image doesn't fully cover.
-// See assets/backgrounds/README.md for the source asset set.
+// A flat-color wash (an opaque-looking linear-gradient layered on top via CSS's normal
+// multiple-background-image stacking, first listed = topmost) mutes the photo's own saturated
+// sunset colors down to the app's own Blush/Espresso tone, so it reads as a tinted backdrop
+// behind the glass rather than competing with it. See assets/backgrounds/README.md for the
+// source asset set.
 const BACKDROP_PHOTO_LIGHT = Platform.OS === 'web' ? ({
-  backgroundImage: 'url(backgrounds/light/khavair-bg-light-base_852x1847.webp)',
-  backgroundSize: 'cover',
-  backgroundPosition: 'center',
-  backgroundRepeat: 'no-repeat',
+  backgroundImage: 'linear-gradient(rgba(255,230,225,.6), rgba(255,230,225,.6)), url(backgrounds/light/khavair-bg-light-base_852x1847.webp)',
+  backgroundSize: 'cover, cover',
+  backgroundPosition: 'center, center',
+  backgroundRepeat: 'no-repeat, no-repeat',
 } as any) : undefined;
 const BACKDROP_PHOTO_DARK = Platform.OS === 'web' ? ({
-  backgroundImage: 'url(backgrounds/dark/khavair-bg-dark-base_853x1844.webp)',
-  backgroundSize: 'cover',
-  backgroundPosition: 'center',
-  backgroundRepeat: 'no-repeat',
+  backgroundImage: 'linear-gradient(rgba(43,31,27,.65), rgba(43,31,27,.65)), url(backgrounds/dark/khavair-bg-dark-base_853x1844.webp)',
+  backgroundSize: 'cover, cover',
+  backgroundPosition: 'center, center',
+  backgroundRepeat: 'no-repeat, no-repeat',
 } as any) : undefined;
 type RosterRow = { kind: 'flight'; key: string; sortKey: string; card: FlightCardGroup } | { kind: 'ground'; key: string; sortKey: string; event: GroundEvent };
 type RosterDuty = { roster: ParsedAirAstanaRoster; duty: Duty };

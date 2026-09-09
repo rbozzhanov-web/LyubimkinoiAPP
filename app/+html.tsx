@@ -40,27 +40,22 @@ const APP_SHELL_CSS = `
   body { background: #F4F1EC; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
 
   /*
-   * Special Mode's real backdrop is the sunset-clouds photo applied in
+   * Special Mode's real backdrop is the tinted sunset-clouds photo applied in
    * MainScreen.tsx (Special Mode + web only, see the backdropPhoto palette
-   * field there and assets/backgrounds/README.md) -- the frosted glass cards
-   * were built to blur a real photo, not a flat color. This shell rule only
-   * covers #root/safe-area edges before hydration and during overscroll
-   * bounce, so it uses the same photo to avoid a flat-color flash.
+   * field there and assets/backgrounds/README.md). This shell rule only
+   * covers the sliver of body that's permanently visible above #root (the
+   * Dynamic Island cushion described on #root below, not just a pre-hydration
+   * flash) -- it deliberately stays a flat color, not the photo: #root and
+   * body compute "cover"-sized backgrounds against different box heights, so
+   * two independently-cropped copies of the same image never quite line up
+   * and show as a visible seam right at that boundary. A flat tint in the
+   * app's own color blends into the tinted photo below it instead.
    */
-  body:has(#root [aria-label="KhaVair special mode"]) {
-    background-color: #FFE6E1;
-    background-image: url('backgrounds/light/khavair-bg-light-base_852x1847.webp');
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-  }
+  body:has(#root [aria-label="KhaVair special mode"]) { background: #FFE6E1; }
 
   @media (prefers-color-scheme: dark) {
     body { background: #11110F; }
-    body:has(#root [aria-label="KhaVair special mode"]) {
-      background-color: #2B1F1B;
-      background-image: url('backgrounds/dark/khavair-bg-dark-base_853x1844.webp');
-    }
+    body:has(#root [aria-label="KhaVair special mode"]) { background: #2B1F1B; }
   }
 `;
 
