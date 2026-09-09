@@ -14,7 +14,7 @@ import { DEFAULT_PROFILE, type CrewProfile } from '@/src/domain/profile';
 import { sumReportedBlockMinutes, sumReportedNightMinutes } from '@/src/domain/layovers';
 import { formatMinutes, rosterMonthLabel, rosterToDuties, rosterToFlightCardGroups, rosterToGroundEvents, sectorRoute, type FlightCardGroup } from '@/src/domain/rosterView';
 import { stationLocalDateTimeMs } from '@/src/domain/stationTime';
-import { pickAndParseRoster } from '@/src/import/pickRoster';
+import { openAimsWebArchiveFlow } from '@/src/import/pasteWebArchive';
 import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
 import { clearPayData } from '@/src/storage/payStorage';
 import { clearStoredRosters, loadStoredRosters, removeStoredRoster, upsertStoredRoster } from '@/src/storage/rosterStorage';
@@ -283,11 +283,11 @@ export default function MainScreen() {
     setImportError(undefined);
     setImporting(true);
     try {
-      const parsed = await pickAndParseRoster();
-      if (!parsed) return;
-      const next = upsertStoredRoster(parsed);
+      const result = await openAimsWebArchiveFlow();
+      if (!result) return;
+      const next = upsertStoredRoster(result.roster);
       setRosters(next);
-      setActiveMonth(parsed.period.start);
+      setActiveMonth(result.roster.period.start);
       setSelectedFlight(undefined);
       setTab('Roster');
     } catch (error) {
