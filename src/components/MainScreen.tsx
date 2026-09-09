@@ -61,7 +61,7 @@ const BACKDROP_PHOTO_DARK = Platform.OS === 'web' ? ({
   backgroundPosition: 'center, center',
   backgroundRepeat: 'no-repeat, no-repeat',
 } as any) : undefined;
-type RosterRow = { kind: 'flight'; key: string; sortKey: string; card: FlightCardGroup } | { kind: 'ground'; key: string; sortKey: string; event: GroundEvent };
+type RosterRow = { kind: 'flight'; key: string; sortKey: string; card: FlightCardGroup } | { kind: 'ground'; key: string; sortKey: string; event: GroundEvent } | { kind: 'hotel'; key: string; sortKey: string; stay: RosterHotelStay & { date: string } };
 type RosterDuty = { roster: ParsedAirAstanaRoster; duty: Duty };
 type FocusDuty = RosterDuty & { reportMs: number; releaseMs: number };
 const WEB_GLASS = Platform.OS === 'web'
@@ -179,7 +179,7 @@ const todayGlow = (palette: Palette) => ({
 // authoritative scroll offset before rows are actually measured.
 const LIST_TOP_PADDING = 8;
 const LIST_ROW_GAP = 7;
-const ROW_HEIGHT_ESTIMATE = { flight: 108, ground: 70 } as const;
+const ROW_HEIGHT_ESTIMATE = { flight: 108, ground: 70, hotel: 78 } as const;
 // Two days is the fallback when no complete layover can be resolved; weatherService expands
 // this to the actual arrival-through-departure range when the roster provides it.
 const FORECAST_DAYS = 2;
@@ -429,7 +429,7 @@ export default function MainScreen() {
 
       <SwipeSurface ref={tabSwipeRef} style={styles.viewport} onSwipeLeft={tab === 'More' ? undefined : () => changeTab(1)} onSwipeRight={tab === 'Home' ? undefined : () => changeTab(-1)}>
         {tab === 'Home' && <Home allDuties={allDuties} fallbackRoster={roster} rosters={rosters} palette={palette} onLovePhrase={handleLovePhrase} onImport={importRoster} importing={importing} />}
-        {tab === 'Roster' && <RosterScreen roster={roster} rosters={rosters} duties={duties} selectedSector={selectedSector} palette={palette} profile={crewProfile} importing={importing} error={importError} onImport={importRoster} onSelect={setSelectedFlight} onMonth={changeMonth} />}
+        {tab === 'Roster' && <RosterScreen roster={roster} rosters={rosters} duties={duties} selectedSector={selectedSector} palette={palette} profile={crewProfile} importing={importing} error={importError} lovedMode={lovedMode} onImport={importRoster} onSelect={setSelectedFlight} onMonth={changeMonth} />}
         {tab === 'Money' && <MoneyScreen key={`${roster?.period.start ?? 'none'}-${payRevision}`} roster={roster} palette={palette} />}
         {tab === 'More' && <MoreScreen rosters={rosters} roster={roster} profile={crewProfile} palette={palette} onDeleteRoster={deleteRoster} onProfileChange={updateCrewProfile} onErase={eraseAll} onSalarySettings={() => setSalarySettingsOpen(true)} />}
       </SwipeSurface>
@@ -624,13 +624,15 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onLovePhrase, onImp
   </View>;
 }
 
-function RosterScreen({ roster, rosters, duties, selectedSector, palette, profile, importing, error, onImport, onSelect, onMonth }: { roster?: ParsedAirAstanaRoster; rosters: ParsedAirAstanaRoster[]; duties: Duty[]; selectedSector?: Sector; palette: Palette; profile: CrewProfile; importing: boolean; error?: string; onImport: () => void; onSelect: (id?: string) => void; onMonth: (direction: -1 | 1) => void }) {
+function RosterScreen({ roster, rosters, duties, selectedSector, palette, profile, importing, error, lovedMode, onImport, onSelect, onMonth }: { roster?: ParsedAirAstanaRoster; rosters: ParsedAirAstanaRoster[]; duties: Duty[]; selectedSector?: Sector; palette: Palette; profile: CrewProfile; importing: boolean; error?: string; lovedMode: boolean; onImport: () => void; onSelect: (id?: string) => void; onMonth: (direction: -1 | 1) => void }) {
   const [calendarState, setCalendarState] = useState<'idle'|'working'|'done'|'error'>('idle');
   const index = roster ? rosters.findIndex((item) => item.period.start === roster.period.start) : -1;
   const flights = useMemo<FlightCardGroup[]>(() => rosterToFlightCardGroups(duties), [duties]);
   const selectedIndex = selectedSector ? flights.findIndex((card) => card.sectors.some((sector) => sector.id === selectedSector.id)) : -1;
   const selectedRow = selectedIndex >= 0 ? flights[selectedIndex] : undefined;
   const groundEvents = useMemo(() => roster ? rosterToGroundEvents(roster) : [], [roster]);
+  // Special Mode only: elsewhere hotel info stays inside the flight card's own detail sheet.
+  const hotelStays = useMemo(() => lovedMode ? (roster?.hotels ?? []).filter((item): item is RosterHotelStay & { date: string } => Boolean(item.date)) : [], [roster, lovedMode]);
   const rows = useMemo<RosterRow[]>(() => {
     const flightRows: RosterRow[] = flights.map((card) => ({
       kind: 'flight', key: card.id, card,
@@ -639,8 +641,11 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
     const groundRows: RosterRow[] = groundEvents.map((event) => ({
       kind: 'ground', key: event.id, event, sortKey: `${event.date}T00:00`,
     }));
-    return [...flightRows, ...groundRows].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-  }, [flights, groundEvents]);
+    const hotelRows: RosterRow[] = hotelStays.map((stay) => ({
+      kind: 'hotel', key: `hotel-${stay.station}-${stay.date}`, stay, sortKey: `${stay.date}T23:59`,
+    }));
+    return [...flightRows, ...groundRows, ...hotelRows].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  }, [flights, groundEvents, hotelStays]);
   const monthSwipeRef = useRef<SwipeSurfaceHandle>(null);
   const listRef = useRef<FlatList<RosterRow>>(null);
   const rowHeights = useRef(new Map<string, number>()).current;
@@ -743,6 +748,7 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
               <Text style={[styles.rosterRoute, { color: isToday ? palette.accent : highlight === 'aqua' ? palette.aqua : highlight === 'forest' ? palette.forest : palette.text }]}>{row.event.code}</Text>
             </View>;
           }
+          if (row.kind === 'hotel') return <HotelRosterCard stay={row.stay} isToday={isToday} palette={palette} onLayout={onLayout} />;
           const { duty, sectors } = row.card;
           const first = sectors[0]!;
           const last = sectors.at(-1)!;
@@ -757,7 +763,7 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
         }} />
     </View>}
 
-    {selectedRow && <FlightDetail sectors={selectedRow.sectors} dateLabel={selectedRow.duty.dateLabel} weatherCode={selectedRow.sectors.at(-1)?.arrival} forecastDate={arrivalForecastDate(selectedRow.duty)} hotel={findHotelStay(roster, selectedRow.sectors.at(-1)!.arrival, selectedRow.sectors.at(-1)!.date)} palette={palette} onClose={() => onSelect(undefined)} onPrevious={selectedIndex > 0 ? () => onSelect(flights[selectedIndex - 1].sectors[0]!.id) : undefined} onNext={selectedIndex < flights.length - 1 ? () => onSelect(flights[selectedIndex + 1].sectors[0]!.id) : undefined} />}
+    {selectedRow && <FlightDetail sectors={selectedRow.sectors} dateLabel={selectedRow.duty.dateLabel} weatherCode={selectedRow.sectors.at(-1)?.arrival} forecastDate={arrivalForecastDate(selectedRow.duty)} hotel={lovedMode ? undefined : findHotelStay(roster, selectedRow.sectors.at(-1)!.arrival, selectedRow.sectors.at(-1)!.date)} palette={palette} onClose={() => onSelect(undefined)} onPrevious={selectedIndex > 0 ? () => onSelect(flights[selectedIndex - 1].sectors[0]!.id) : undefined} onNext={selectedIndex < flights.length - 1 ? () => onSelect(flights[selectedIndex + 1].sectors[0]!.id) : undefined} />}
   </View>;
 }
 
@@ -902,6 +908,32 @@ function formatExpiryDate(date?: string): string {
   if (!date) return '—';
   const parsed = new Date(`${date}T00:00:00Z`);
   return `${String(parsed.getUTCDate()).padStart(2, '0')} ${EXPIRY_MONTHS[parsed.getUTCMonth()]} ${parsed.getUTCFullYear()}`;
+}
+function hotelDateLabel(date: string): string {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return `${String(parsed.getUTCDate()).padStart(2, '0')} ${EXPIRY_MONTHS[parsed.getUTCMonth()]}`;
+}
+
+/** Special Mode's own contracted card for a layover's hotel; tapping it reveals the same
+ * name/check-in/address/phone details the flight card's own sheet shows outside Special Mode. */
+function HotelRosterCard({ stay, isToday, palette, onLayout }: { stay: RosterHotelStay & { date: string }; isToday: boolean; palette: Palette; onLayout: (event: LayoutChangeEvent) => void }) {
+  const [open, setOpen] = useState(false);
+  const dateMeta = dateMetaFor(stay.date, hotelDateLabel(stay.date));
+  const detail = [stay.rest ? `Rest ${stay.rest}` : undefined, stay.station].filter(Boolean).join(' · ');
+  return <>
+    <Pressable onPress={() => setOpen(true)} onLayout={onLayout} style={[styles.rosterCard, palette.cardGlass, isToday && styles.rosterCardToday, { backgroundColor: isToday ? palette.accentSoft : palette.surfaceStrong, borderColor: isToday ? palette.accent : palette.line, ...(isToday ? todayGlow(palette) : null) }]}>
+      <View style={styles.flightCardTop}><Text style={[styles.label, { color: isToday ? palette.accent : dateMeta.weekend ? palette.weekend : palette.muted }]}>{dateMeta.label}{isToday ? ' · TODAY' : ''}</Text><Text style={[styles.flightNumber, { color: palette.muted }]}>HOTEL</Text></View>
+      <Text style={[styles.rosterRoute, { color: palette.text }]}>{stay.hotel ?? 'Layover'}</Text>
+      {detail ? <Text style={[styles.meta, { color: palette.muted }]}>{detail}</Text> : null}
+    </Pressable>
+    <IOSDialog visible={open} onClose={() => setOpen(false)} style={[styles.forecastPopup, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+      <View style={styles.stayCardTop}><Text style={[styles.label, { color: palette.muted }]}>STAY · {stay.station}</Text>{stay.rest ? <Text style={[styles.stayRest, { color: palette.accent }]}>REST {stay.rest}</Text> : null}</View>
+      {stay.hotel ? <Text style={[styles.stayTitle, { color: palette.text }]}>{stay.hotel}</Text> : null}
+      {stay.checkIn || stay.checkOut ? <Text style={[styles.meta, { color: palette.muted }]}>{stay.checkIn ?? '—'} → {stay.checkOut ?? '—'}</Text> : null}
+      {stay.address ? <Text numberOfLines={2} style={[styles.meta, { color: palette.muted }]}>{stay.address}</Text> : null}
+      {stay.phone ? <Text numberOfLines={1} style={[styles.meta, { color: palette.muted }]}>{stay.phone}</Text> : null}
+    </IOSDialog>
+  </>;
 }
 
 function FlightDetail({ sectors, dateLabel, weatherCode, forecastDate, hotel, palette, onClose, onPrevious, onNext }: { sectors: Sector[]; dateLabel: string; weatherCode?: string; forecastDate?: string; hotel?: RosterHotelStay; palette: Palette; onClose: () => void; onPrevious?: () => void; onNext?: () => void }) {
