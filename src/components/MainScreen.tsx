@@ -37,30 +37,7 @@ type Palette = Record<'background'|'surface'|'surfaceStrong'|'text'|'muted'|'lin
   cardGlass?: any;
   tabGlass?: any;
   sheetGlass?: any;
-  backdropPhoto?: any;
 };
-// Special Mode only, web only: a fixed sky photo behind the whole app -- the frosted glass
-// cards (backdrop-filter blur over a translucent surface) were designed for exactly this, so
-// showing them over a real photo instead of a flat color is what actually makes the "liquid
-// glass" material read as glass. `backgroundColor` stays the plain palette color as a fallback
-// for the moment before the image decodes and for anywhere the image doesn't fully cover.
-// A flat-color wash (an opaque-looking linear-gradient layered on top via CSS's normal
-// multiple-background-image stacking, first listed = topmost) mutes the photo's own saturated
-// sunset colors down to the app's own Blush/Espresso tone, so it reads as a tinted backdrop
-// behind the glass rather than competing with it. See assets/backgrounds/README.md for the
-// source asset set.
-const BACKDROP_PHOTO_LIGHT = Platform.OS === 'web' ? ({
-  backgroundImage: 'linear-gradient(rgba(255,230,225,.6), rgba(255,230,225,.6)), url(backgrounds/light/khavair-bg-light-base_852x1847.webp)',
-  backgroundSize: 'cover, cover',
-  backgroundPosition: 'center, center',
-  backgroundRepeat: 'no-repeat, no-repeat',
-} as any) : undefined;
-const BACKDROP_PHOTO_DARK = Platform.OS === 'web' ? ({
-  backgroundImage: 'linear-gradient(rgba(43,31,27,.65), rgba(43,31,27,.65)), url(backgrounds/dark/khavair-bg-dark-base_853x1844.webp)',
-  backgroundSize: 'cover, cover',
-  backgroundPosition: 'center, center',
-  backgroundRepeat: 'no-repeat, no-repeat',
-} as any) : undefined;
 type RosterRow = { kind: 'flight'; key: string; sortKey: string; card: FlightCardGroup } | { kind: 'ground'; key: string; sortKey: string; event: GroundEvent } | { kind: 'hotel'; key: string; sortKey: string; stay: RosterHotelStay & { date: string } };
 type RosterDuty = { roster: ParsedAirAstanaRoster; duty: Duty };
 type FocusDuty = RosterDuty & { reportMs: number; releaseMs: number };
@@ -289,7 +266,6 @@ export default function MainScreen() {
     cardGlass: lovedMode ? WEB_CARD_GLASS_LOVED : undefined,
     tabGlass: lovedMode ? WEB_TAB_GLASS_LOVED : undefined,
     sheetGlass: lovedMode ? WEB_SHEET_GLASS_LOVED : undefined,
-    backdropPhoto: lovedMode ? (dark ? BACKDROP_PHOTO_DARK : BACKDROP_PHOTO_LIGHT) : undefined,
   }), [dark, lovedMode]);
 
   useEffect(() => {
@@ -400,7 +376,17 @@ export default function MainScreen() {
     setTab('Home');
   };
 
-  return <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }, palette.backdropPhoto]} edges={desktopWeb ? ['bottom'] : ['top', 'bottom']}>
+  // Special Mode's real backdrop is a fixed, full-viewport wallpaper layer rendered in
+  // app/+html.tsx as a sibling of #root (see #khavair-wallpaper there for why: #root carries
+  // its own transform for the Dynamic Island cushion, and any position:fixed descendant of a
+  // transformed ancestor is scoped to that ancestor's box instead of the true viewport, so the
+  // wallpaper can only reach the physical screen edges by living outside #root entirely). This
+  // SafeAreaView must turn transparent for that to show through -- everything inside it (the
+  // header, hero card gaps, roster list gaps) is already transparent by default, so this is the
+  // only opaque fill standing between the viewer and the wallpaper.
+  const rootBackground = lovedMode && Platform.OS === 'web' ? 'transparent' : palette.background;
+
+  return <SafeAreaView style={[styles.safe, { backgroundColor: rootBackground }]} edges={desktopWeb ? ['bottom'] : ['top', 'bottom']}>
     <View style={styles.app}>
       <View style={styles.header}>
         <View style={styles.headerText}>
