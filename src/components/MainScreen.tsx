@@ -67,16 +67,29 @@ const WEB_SHEET_GLASS_LOVED = Platform.OS === 'web'
  * only ships as a web PWA anyway, so there's no real fallback path to write beyond that.
  *
  * Deliberately no `contain: paint` here even though it would help compositor promotion: Safari
- * clips `contain: paint` to the element's plain rectangular bounds regardless of border-radius,
- * which squared off one corner of every glass card's rounded border on an actual iPhone (never
- * showed up in Chromium testing). The cards already carry `overflow: 'hidden'`, which clips to
- * the rounded border correctly in every engine, so this is the one guardrail from the original
- * spec this file skips.
+ * clips `contain: paint` to the element's plain rectangular bounds regardless of border-radius.
+ * The cards already carry `overflow: 'hidden'`, which clips to the rounded border correctly
+ * everywhere else, so this is the one guardrail from the original spec this file skips.
+ *
+ * `isolation: 'isolate'` and the `WebkitMaskImage` below are two more guardrails for the same
+ * family of bug, confirmed to reproduce specifically in iOS's home-screen "Add to Home Screen"
+ * standalone container and NOT in a plain Safari tab on the same device: iOS renders a
+ * standalone PWA through a different compositing path than a Safari tab, and `backdrop-filter`
+ * combined with `border-radius` is known to stop clipping to the rounded corner there even
+ * though the identical CSS clips correctly in Safari itself. `isolation: 'isolate'` forces this
+ * element to be its own compositing boundary (also guards against the sheen child's
+ * `mix-blend-mode` and the hero's `transform`-animated wrapper escaping the rounded clip, a
+ * related but separate class of the same bug). The mask-image is the standard, widely-used
+ * workaround for the standalone-container case specifically: an opaque mask that changes
+ * nothing visually but forces the browser to actually recompute the clip against the rounded
+ * shape instead of reusing a stale rectangular one.
  */
 const LIQUID_GLASS_BASE = Platform.OS === 'web' ? ({
   backdropFilter: 'blur(18px) saturate(1.8)',
   WebkitBackdropFilter: 'blur(18px) saturate(1.8)',
   boxShadow: 'inset 0 1px 0 rgba(255,255,255,.4), 0 15px 35px rgba(0,0,0,.25)',
+  isolation: 'isolate',
+  WebkitMaskImage: '-webkit-radial-gradient(white, black)',
 } as any) : undefined;
 const LIQUID_GLASS_BORDER = 'rgba(255,255,255,.16)';
 const LIQUID_SHEEN_BG = Platform.OS === 'web' ? ({
