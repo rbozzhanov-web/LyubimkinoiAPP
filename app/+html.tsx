@@ -37,7 +37,23 @@ const APP_SHELL_CSS = `
   #root * { -webkit-overflow-scrolling: touch; }
   html * { scrollbar-width: none; -ms-overflow-style: none; }
   html *::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
-  body { background: #F4F1EC; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
+  /*
+   * Sunset-clouds plane-window photo behind #root/safe-area edges (see
+   * assets/backgrounds/README.md). background-color is the fallback for the
+   * moment before the image decodes and for any edge the cover-sized image
+   * doesn't reach; background-attachment is deliberately omitted since
+   * "fixed" is unreliable in iOS standalone PWAs -- #root's own overflow
+   * and overscroll-behavior:none already keep this from scrolling.
+   */
+  body {
+    background-color: #F4F1EC;
+    background-image: url('backgrounds/light/khavair-bg-light-base_852x1847.webp');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
 
   /*
    * Special Mode now uses the Kha♥air color system directly (Blush/Espresso
@@ -48,7 +64,10 @@ const APP_SHELL_CSS = `
   body:has(#root [aria-label="KhaVair special mode"]) { background: #FFE6E1; }
 
   @media (prefers-color-scheme: dark) {
-    body { background: #11110F; }
+    body {
+      background-color: #11110F;
+      background-image: url('backgrounds/dark/khavair-bg-dark-base_853x1844.webp');
+    }
     body:has(#root [aria-label="KhaVair special mode"]) { background: #2B1F1B; }
   }
 `;
@@ -224,7 +243,7 @@ export default function Root({ children }: { children: ReactNode }) {
       <meta name="mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-title" content="KhaVair" />
-      <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+      <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       <meta name="format-detection" content="telephone=no" />
       <meta name="referrer" content="no-referrer" />
       <meta name="description" content="Private cabin crew roster, per diem and pay companion." />
