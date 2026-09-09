@@ -4,6 +4,19 @@ import { extractDayColumns, type DayColumn } from './grid';
 import { parsePeriod, parseReportTotals, parseSubject, type ReportPeriod, type ReportSubject, type ReportTotals } from './header';
 import type { ExtractedPage } from './types';
 
+export interface RosterExpiry { code: string; description?: string; date?: string }
+export interface RosterHotelStay {
+  station: string;
+  /** Absent for a station-directory entry not tied to a specific dated stay. */
+  date?: string;
+  hotel?: string;
+  rest?: string;
+  checkIn?: string;
+  checkOut?: string;
+  address?: string;
+  phone?: string;
+}
+
 export interface ParsedAirAstanaRoster {
   subject?: ReportSubject;
   period: ReportPeriod;
@@ -17,6 +30,10 @@ export interface ParsedAirAstanaRoster {
   groundDuties?: RosterGroundDuty[];
   crewRecords: CrewRecord[];
   unreadCells: string[];
+  /** Only available when parsed from an AIMS Web Archive; the PDF report does not include this. */
+  expiries?: RosterExpiry[];
+  /** Only available when parsed from an AIMS Web Archive; the PDF report does not include this. */
+  hotels?: RosterHotelStay[];
 }
 
 export function parseAirAstanaRoster(pages: ExtractedPage[]): ParsedAirAstanaRoster {

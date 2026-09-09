@@ -34,7 +34,7 @@ export function openAimsWebArchiveFlow(): Promise<AimsWebArchiveResult | undefin
     Object.assign(help.style, { fontSize: '14px', lineHeight: '20px', opacity: '.72', marginBottom: '8px' });
 
     const helpPeriod = document.createElement('div');
-    helpPeriod.textContent = 'Web Archive import is being wired up. For now, generate the PDF "Personal Crew Schedule Report" in AIMS and import that file below the same way.';
+    helpPeriod.textContent = 'Web Archive only ever captures the period currently open in AIMS. For a different month, generate the PDF "Personal Crew Schedule Report" for that period instead — you can import that file the same way, below.';
     Object.assign(helpPeriod.style, { fontSize: '13px', lineHeight: '18px', opacity: '.6', marginBottom: '14px' });
 
     const openAims = document.createElement('button');

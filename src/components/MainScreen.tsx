@@ -11,11 +11,11 @@ import type { Duty, GroundEvent, Sector } from '@/src/domain/types';
 import { verifyLovedModeCode } from '@/src/domain/lovedMode';
 import { detectLoveContext, pickLovePhrase } from '@/src/domain/lovePhrases';
 import { DEFAULT_PROFILE, type CrewProfile } from '@/src/domain/profile';
-import { sumReportedBlockMinutes, sumReportedNightMinutes } from '@/src/domain/layovers';
+import { findHotelStay, sumReportedBlockMinutes, sumReportedNightMinutes } from '@/src/domain/layovers';
 import { formatMinutes, rosterMonthLabel, rosterToDuties, rosterToFlightCardGroups, rosterToGroundEvents, sectorRoute, type FlightCardGroup } from '@/src/domain/rosterView';
 import { stationLocalDateTimeMs } from '@/src/domain/stationTime';
 import { openAimsWebArchiveFlow } from '@/src/import/pasteWebArchive';
-import type { ParsedAirAstanaRoster } from '@/src/import/parseAirAstanaRoster';
+import type { ParsedAirAstanaRoster, RosterExpiry, RosterHotelStay } from '@/src/import/parseAirAstanaRoster';
 import { clearPayData } from '@/src/storage/payStorage';
 import { clearStoredRosters, loadStoredRosters, removeStoredRoster, upsertStoredRoster } from '@/src/storage/rosterStorage';
 import { activateSpecialPayPreset } from '@/src/storage/specialPayPreset';
@@ -596,7 +596,7 @@ function Home({ allDuties, fallbackRoster, rosters, palette, onLovePhrase, onImp
           </View>
         </View>} />
     </View>}
-    {crewOpen && <FlightDetail sectors={duty.sectors} dateLabel={duty.dateLabel} weatherCode={last.arrival} forecastDate={forecastDate} palette={palette} onClose={() => setCrewOpen(false)} />}
+    {crewOpen && <FlightDetail sectors={duty.sectors} dateLabel={duty.dateLabel} weatherCode={last.arrival} forecastDate={forecastDate} hotel={findHotelStay(roster, last.arrival, last.date)} palette={palette} onClose={() => setCrewOpen(false)} />}
   </View>;
 }
 
@@ -733,7 +733,7 @@ function RosterScreen({ roster, rosters, duties, selectedSector, palette, profil
         }} />
     </View>}
 
-    {selectedRow && <FlightDetail sectors={selectedRow.sectors} dateLabel={selectedRow.duty.dateLabel} weatherCode={selectedRow.sectors.at(-1)?.arrival} forecastDate={arrivalForecastDate(selectedRow.duty)} palette={palette} onClose={() => onSelect(undefined)} onPrevious={selectedIndex > 0 ? () => onSelect(flights[selectedIndex - 1].sectors[0]!.id) : undefined} onNext={selectedIndex < flights.length - 1 ? () => onSelect(flights[selectedIndex + 1].sectors[0]!.id) : undefined} />}
+    {selectedRow && <FlightDetail sectors={selectedRow.sectors} dateLabel={selectedRow.duty.dateLabel} weatherCode={selectedRow.sectors.at(-1)?.arrival} forecastDate={arrivalForecastDate(selectedRow.duty)} hotel={findHotelStay(roster, selectedRow.sectors.at(-1)!.arrival, selectedRow.sectors.at(-1)!.date)} palette={palette} onClose={() => onSelect(undefined)} onPrevious={selectedIndex > 0 ? () => onSelect(flights[selectedIndex - 1].sectors[0]!.id) : undefined} onNext={selectedIndex < flights.length - 1 ? () => onSelect(flights[selectedIndex + 1].sectors[0]!.id) : undefined} />}
   </View>;
 }
 
@@ -745,6 +745,9 @@ function MoreScreen({ rosters, roster, profile, palette, onDeleteRoster, onProfi
   const [profileOpen, setProfileOpen] = useState(false);
   const [rankDraft, setRankDraft] = useState(profile.contractRank);
   const [deleteCandidate, setDeleteCandidate] = useState<ParsedAirAstanaRoster>();
+  const [expiriesOpen, setExpiriesOpen] = useState(false);
+  const expiries = roster?.expiries ?? [];
+  const sortedExpiries = useMemo(() => [...expiries].sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '')), [expiries]);
 
   useEffect(() => { if (!profileOpen) setRankDraft(profile.contractRank); }, [profile.contractRank, profileOpen]);
 
@@ -795,6 +798,14 @@ function MoreScreen({ rosters, roster, profile, palette, onDeleteRoster, onProfi
       </View> : <Text style={[styles.meta, { color: palette.muted }]}>No months imported</Text>}
     </View>
 
+    {roster?.expiries !== undefined && <View style={[styles.libraryCard, styles.depthSurface, palette.cardGlass, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+      <Pressable onPress={() => setExpiriesOpen(true)} style={styles.expiryHeaderRow} accessibilityRole="button">
+        <Text style={[styles.cardTitle, { color: palette.text }]}>Expiry Dates{sortedExpiries.length ? ` · ${sortedExpiries.length}` : ''}</Text>
+        <Text style={[styles.chevron, { color: palette.accent }]}>›</Text>
+      </Pressable>
+      {sortedExpiries.length === 0 && <Text style={[styles.meta, { color: palette.muted, marginTop: 8 }]}>No expiry data in the imported roster.</Text>}
+    </View>}
+
     <InfoCard title="Privacy" palette={palette}><Text style={[styles.meta, { color: palette.muted }]}>Roster PDFs are parsed locally and the source PDF bytes are not stored. Crew lists, parsed roster data and salary settings stay on this device. Weather sends only an airport code to Open-Meteo — no roster or crew data.</Text></InfoCard>
     {rosters.length > 0 && <Pressable onPress={onErase} style={[styles.secondaryButton, { borderColor: palette.line }]}><Text style={[styles.secondaryText, { color: palette.text }]}>Erase local roster & pay data</Text></Pressable>}
     </ScrollView>
@@ -828,10 +839,48 @@ function MoreScreen({ rosters, roster, profile, palette, onDeleteRoster, onProfi
         </View>
       </View>
     </Modal>
+
+    <IOSSheet visible={expiriesOpen} onClose={() => setExpiriesOpen(false)} handleColor={palette.line} style={[styles.expirySheet, palette.sheetGlass ?? WEB_GLASS, { backgroundColor: palette.surfaceStrong, borderColor: palette.line }]}>
+      <Text style={[styles.cardTitle, { color: palette.text }]}>Expiry Dates{sortedExpiries.length ? ` · ${sortedExpiries.length}` : ''}</Text>
+      <FlatList
+        data={sortedExpiries}
+        keyExtractor={(item, index) => `${item.code}-${item.date ?? index}`}
+        style={styles.expirySheetList}
+        contentContainerStyle={styles.expirySheetListContent}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={<Text style={[styles.meta, { color: palette.muted, marginTop: 8 }]}>No expiry data in the imported roster.</Text>}
+        renderItem={({ item }) => <ExpiryRow expiry={item} palette={palette} />}
+      />
+    </IOSSheet>
   </>;
 }
 
-function FlightDetail({ sectors, dateLabel, weatherCode, forecastDate, palette, onClose, onPrevious, onNext }: { sectors: Sector[]; dateLabel: string; weatherCode?: string; forecastDate?: string; palette: Palette; onClose: () => void; onPrevious?: () => void; onNext?: () => void }) {
+function ExpiryRow({ expiry, palette }: { expiry: RosterExpiry; palette: Palette }) {
+  const status = expiryStatus(expiry.date);
+  const color = status === 'expired' ? palette.rose : status === 'soon' ? palette.accent : palette.text;
+  return <View style={[styles.libraryRow, { borderColor: palette.line }]}>
+    <View style={styles.grow}>
+      <Text style={[styles.libraryMonth, { color: palette.text }]}>{expiry.code}</Text>
+      {expiry.description && <Text numberOfLines={1} style={[styles.meta, { color: palette.muted }]}>{expiry.description}</Text>}
+    </View>
+    <Text style={[styles.expiryDate, { color }]}>{formatExpiryDate(expiry.date)}</Text>
+  </View>;
+}
+
+function expiryStatus(date?: string): 'expired' | 'soon' | 'ok' | undefined {
+  if (!date) return undefined;
+  const days = Math.floor((Date.parse(`${date}T00:00:00Z`) - Date.now()) / 86_400_000);
+  return days < 0 ? 'expired' : days <= 60 ? 'soon' : 'ok';
+}
+
+const EXPIRY_MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+function formatExpiryDate(date?: string): string {
+  if (!date) return '—';
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return `${String(parsed.getUTCDate()).padStart(2, '0')} ${EXPIRY_MONTHS[parsed.getUTCMonth()]} ${parsed.getUTCFullYear()}`;
+}
+
+function FlightDetail({ sectors, dateLabel, weatherCode, forecastDate, hotel, palette, onClose, onPrevious, onNext }: { sectors: Sector[]; dateLabel: string; weatherCode?: string; forecastDate?: string; hotel?: RosterHotelStay; palette: Palette; onClose: () => void; onPrevious?: () => void; onNext?: () => void }) {
   const [scrollAtTop, setScrollAtTop] = useState(true);
   const first = sectors[0]!;
   const last = sectors.at(-1)!;
@@ -848,6 +897,16 @@ function FlightDetail({ sectors, dateLabel, weatherCode, forecastDate, palette, 
   >
     <SwipeSurface style={styles.flightSheetContent} onSwipeLeft={onNext} onSwipeRight={onPrevious} threshold={44}>
       <View style={styles.sheetHeader}><View style={styles.grow}><Text style={[styles.label, { color: palette.muted }]}>{dateLabel} · {sectors.map((sector) => sector.flightNumber).join(' · ')}</Text><Text style={[styles.sheetRoute, { color: palette.text }]}>{sectorRoute(sectors)}</Text><Text style={[styles.meta, { color: palette.muted }]}>{first.departureTime} – {last.arrivalTime}</Text><WeatherChip code={weatherCode ?? last.arrival} targetDate={forecastDate} palette={palette} /></View></View>
+      {hotel && <View style={[styles.stayCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+        <View style={styles.stayCardTop}>
+          <Text style={[styles.label, { color: palette.muted }]}>STAY · {hotel.station}</Text>
+          {hotel.rest && <Text style={[styles.stayRest, { color: palette.accent }]}>REST {hotel.rest}</Text>}
+        </View>
+        {hotel.hotel && <Text style={[styles.stayTitle, { color: palette.text }]}>{hotel.hotel}</Text>}
+        {(hotel.checkIn || hotel.checkOut) && <Text style={[styles.meta, { color: palette.muted }]}>{hotel.checkIn ?? '—'} → {hotel.checkOut ?? '—'}</Text>}
+        {hotel.address && <Text numberOfLines={2} style={[styles.meta, { color: palette.muted }]}>{hotel.address}</Text>}
+        {hotel.phone && <Text numberOfLines={1} style={[styles.meta, { color: palette.muted }]}>{hotel.phone}</Text>}
+      </View>}
       <Text style={[styles.swipeHint, { color: palette.muted }]}>{onPrevious ? '‹ ' : ''}swipe flight{onNext ? ' ›' : ''} · swipe down to close</Text>
       <Text style={[styles.flyingWith, { color: palette.accent }]}>{sectors.length > 1 ? `${sectors.length} flights · ` : ''}Flying with · {crewCount}</Text>
       <FlatList
@@ -1113,10 +1172,10 @@ const styles = StyleSheet.create({
   monthNav: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, monthNavText: { fontSize: 12, fontWeight: '600' }, error: { fontSize: 12 },
   emptyCard: { borderWidth: 1, borderRadius: 20, padding: 14 }, innerWindow: { flex: 1, minHeight: 0, borderWidth: 1, borderRadius: 20, overflow: 'hidden' }, listContent: { padding: 8, gap: 7, paddingBottom: 18 }, rosterCard: { borderWidth: 1, borderRadius: 16, padding: 13 }, rosterCardToday: { borderWidth: 1.5 }, flightCardTop: { flexDirection: 'row', justifyContent: 'space-between' }, flightNumber: { fontSize: 11, fontWeight: '700' }, flightNumbers: { fontSize: 11, lineHeight: 16, fontWeight: '700', marginTop: 4, flexShrink: 1 }, rosterRoute: { fontSize: 20, lineHeight: 25, fontWeight: '700', marginTop: 5 },
   infoCard: { borderWidth: 1, borderRadius: 20, padding: 14, gap: 3 }, cardTitle: { fontSize: 15, fontWeight: '700' }, settingsCard: { minHeight: 68, borderWidth: 1, borderRadius: 20, padding: 14, flexDirection: 'row', alignItems: 'center' }, chevron: { fontSize: 30 }, secondaryButton: { height: 48, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, secondaryText: { fontWeight: '600' },
-  libraryCard: { borderWidth: 1, borderRadius: 20, padding: 14, minHeight: 88 }, libraryList: { marginTop: 5 }, libraryRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth }, libraryMonth: { fontSize: 14, fontWeight: '700' }, deleteRosterButton: { minWidth: 58, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 }, deleteRosterText: { fontSize: 11, fontWeight: '700' },
+  libraryCard: { borderWidth: 1, borderRadius: 20, padding: 14, minHeight: 88 }, libraryList: { marginTop: 5 }, libraryRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth }, libraryMonth: { fontSize: 14, fontWeight: '700' }, deleteRosterButton: { minWidth: 58, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 }, deleteRosterText: { fontSize: 11, fontWeight: '700' }, expiryHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, expiryDate: { fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] }, expirySheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderTopWidth: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 18, paddingBottom: 12, overflow: 'hidden' }, expirySheetList: { marginTop: 10 }, expirySheetListContent: { paddingBottom: 12 },
   depthSurface: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 24, elevation: 5 },
   tabBar: { height: 68, marginTop: 8, marginBottom: 4, borderWidth: 1, borderRadius: 22, flexDirection: 'row' }, tabSelection: { position: 'absolute', left: 4, top: 4, bottom: 4, borderRadius: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 2 }, tabItem: { flex: 1, zIndex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabIconWrap: { minWidth: 35, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, tabIcon: { textAlign: 'center' }, tabText: { fontSize: 11, fontWeight: '600' },
-  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end' }, flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderTopWidth: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 18, paddingBottom: 12, overflow: 'hidden' }, flightSheetContent: { minHeight: 0, flexShrink: 1 }, sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }, sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 }, swipeHint: { fontSize: 10, marginTop: 7 }, flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 7 }, crewScroll: { minHeight: 0, flexShrink: 1 }, crewList: { paddingBottom: 12 }, flightSegment: { marginTop: 8, marginBottom: 3 }, crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' }, avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, avatarText: { fontSize: 12, fontWeight: '800' }, crewName: { fontSize: 14, fontWeight: '600' },
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.42)', justifyContent: 'flex-end' }, flightSheet: { width: '100%', maxWidth: 620, maxHeight: '78%', alignSelf: 'center', borderTopWidth: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 18, paddingBottom: 12, overflow: 'hidden' }, flightSheetContent: { minHeight: 0, flexShrink: 1 }, sheetHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }, sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sheetRoute: { fontSize: 28, lineHeight: 33, fontWeight: '700', marginTop: 5 }, stayCard: { borderWidth: 1, borderRadius: 16, padding: 12, marginTop: 12, gap: 3 }, stayCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, stayRest: { fontSize: 13, fontWeight: '800' }, stayTitle: { fontSize: 15, fontWeight: '700' }, swipeHint: { fontSize: 10, marginTop: 7 }, flyingWith: { fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 7 }, crewScroll: { minHeight: 0, flexShrink: 1 }, crewList: { paddingBottom: 12 }, flightSegment: { marginTop: 8, marginBottom: 3 }, crewRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center' }, avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, avatarText: { fontSize: 12, fontWeight: '800' }, crewName: { fontSize: 14, fontWeight: '600' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,.56)', alignItems: 'center', justifyContent: 'center', padding: 20 }, unlockCard: { width: '100%', maxWidth: 390, borderWidth: 1, borderRadius: 26, padding: 20 }, unlockTitle: { fontSize: 26, fontWeight: '700', marginTop: 7 }, codeInput: { height: 54, borderWidth: 1, borderRadius: 15, marginTop: 18, paddingHorizontal: 16, fontSize: 22, letterSpacing: 5, textAlign: 'center' }, codeHint: { fontSize: 11, lineHeight: 15, marginTop: 6 }, codeExample: { fontSize: 11, lineHeight: 15, marginTop: 2 }, actions: { flexDirection: 'row', gap: 9, marginTop: 18 }, action: { flex: 1, height: 46, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   confirmCard: { width: '100%', maxWidth: 390, borderWidth: 1, borderRadius: 26, padding: 20 }, confirmTitle: { fontSize: 24, lineHeight: 29, fontWeight: '700', marginTop: 6, marginBottom: 8 }, profileInput: { height: 50, borderWidth: 1, borderRadius: 14, marginTop: 15, paddingHorizontal: 14, fontSize: 17, fontWeight: '600' },
 });

@@ -9,6 +9,7 @@ import { swipeAxis } from '../src/domain/gesture';
 import type { ExtractedPage, TextItem } from '../src/import/types';
 import { readRoster } from '../src/import/duties';
 import { rosterToFlightCardGroups, sectorRoute } from '../src/domain/rosterView';
+import { parseAimsCrewScheduleArchive } from '../src/import/aimsCrewScheduleArchive';
 
 const MRP_2026 = 4325;
 
@@ -239,5 +240,54 @@ equal(stationLocalDateTimeMs('SCO', '2026-08-28', '12:00'), Date.UTC(2026, 7, 28
 const icnReport = stationLocalDateTimeMs('ICN', '2026-08-28', '10:10');
 const alaRelease = stationLocalDateTimeMs('ALA', '2026-08-28', '15:07');
 equal((alaRelease! - icnReport!) / 60000, 537, 'ICN->ALA duty spans 8:57');
+
+// AIMS Web Archive import: the saved page carries a real "initialResult" JSON blob (Scheduler
+// Events for flights/ground duties, an elementList with the crew/hotel/expiry/hours tables
+// rendered on the page) that the PDF report never has. Crew rows are separated by an em space
+// (U+2003), not a plain space -- eScrew's own parser relies on that, and so does this one.
+const EMSP = '\u2003';
+const archiveInitialResult = {
+  SchedulerEvents: [
+    { start: '2026-06-05T08:00:00', end: '2026-06-05T18:00:00', type: 'Flight', details: '1229 - ALA (0900) - TSE (1030)', IsDeadhead: false },
+    { start: '2026-06-05T18:00:00', end: '2026-06-06T08:00:00', location: 'TSE', text: 'Rest Rixos Astana (Hotel)', HotelInfo: { Rest: '14:30', CheckInTime: '19:00', CheckOutTime: '09:30' } },
+    { start: '2026-06-06T00:00:00', end: '2026-06-06T23:59:00', text: 'OFF' },
+    { start: '2026-06-07T00:00:00', end: '2026-06-07T23:59:00', text: 'VAC' },
+  ],
+  elementList: [
+    { id: 'members', data: [
+      { value: `05/06/2026${EMSP}1229${EMSP}ALA-TSE`, data: [
+        { value2: 'IVANOV IVAN', value3: '12345', value4: 'CP' },
+        { value2: 'PETROV PETR', value3: '54321', value4: 'PU-DHC' },
+      ] },
+    ] },
+    { id: 'hotels', data: [{ port: 'TSE', addresses: '10 Turan Ave, Astana', phones: '+7 700 000 00 00' }] },
+    { id: 'expiries', data: [{ code: 'PPL', description: 'Passport', expirydate: '2027/03/15' }] },
+    { id: 'hours', data: [{ desc: 'Block Hours', hours: '62:15' }, { desc: 'Night Hours', hours: '9:40' }] },
+  ],
+};
+const archiveHtml = `<script>localStorage['PeriodStart']='2026-06-01';localStorage['PeriodEnd']='2026-06-30';var initialResult = ${JSON.stringify(archiveInitialResult)};</script><div>CrewSchedule /eCrew/CrewSchedule</div>`;
+const archiveRoster = parseAimsCrewScheduleArchive(archiveHtml);
+equal(archiveRoster.period.start, '2026-06-01', 'archive period start');
+equal(archiveRoster.period.end, '2026-06-30', 'archive period end');
+equal(archiveRoster.totals.blockMinutes, 62 * 60 + 15, 'archive block minutes');
+equal(archiveRoster.totals.nightMinutes, 9 * 60 + 40, 'archive night minutes');
+equal(archiveRoster.sectors.length, 1, 'archive sector count');
+equal(archiveRoster.sectors[0].flightNumber, '1229', 'archive sector flight number');
+equal(archiveRoster.sectors[0].departureAirport, 'ALA', 'archive sector departure');
+equal(archiveRoster.sectors[0].arrivalAirport, 'TSE', 'archive sector arrival');
+equal(archiveRoster.sectors[0].timeOut, '09:00', 'archive sector time out');
+equal(archiveRoster.sectors[0].timeIn, '10:30', 'archive sector time in');
+equal(archiveRoster.groundDuties?.length, 2, 'archive ground duty count');
+equal(archiveRoster.groundDuties?.[0].code, 'OFF', 'OFF is a ground duty');
+equal(archiveRoster.absences.length, 1, 'only VAC counts as a payroll absence');
+equal(archiveRoster.absences[0].code, 'VAC', 'archive absence code');
+equal(archiveRoster.crewRecords.length, 1, 'archive crew record count');
+equal(archiveRoster.crewRecords[0].flightNumber, '1229', 'crew record matches sector flight number');
+equal(archiveRoster.crewRecords[0].members[0].rank, 'CP', 'captain rank parsed');
+equal(archiveRoster.crewRecords[0].members[1].deadhead, true, 'DHC purser flagged as deadhead');
+equal(archiveRoster.expiries?.[0].code, 'PPL', 'expiry code');
+equal(archiveRoster.expiries?.[0].date, '2027-03-15', 'expiry date normalized to ISO');
+equal(archiveRoster.hotels?.[0].hotel, 'Rixos Astana', 'hotel name read from the Rest event text');
+equal(archiveRoster.hotels?.[0].address, '10 Turan Ave, Astana', 'hotel address merged from the directory table');
 
 console.log('Domain smoke tests passed');
